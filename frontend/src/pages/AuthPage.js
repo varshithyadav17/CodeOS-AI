@@ -56,7 +56,7 @@ export default function AuthPage() {
         <div className="relative">
           <div className="flex flex-col gap-2 mb-8">
             <img src={logoLight} alt="CodeOS AI" className="h-8 w-auto" />
-            <div className="text-[10px] mono uppercase tracking-[0.2em] text-white/40">The AI Operating System for Software</div>
+            <div className="mt-2 w-full text-center text-[10px] mono uppercase tracking-[0.2em] text-white/40">The AI Operating System for Software</div>
           </div>
         </div>
 
@@ -83,7 +83,7 @@ export default function AuthPage() {
         </div>
 
         <div className="relative text-[10px] text-white/30 mono uppercase tracking-[0.2em]">
-          v0.1.0 · Phase 1
+          created to help developers.
         </div>
       </div>
 
@@ -92,7 +92,6 @@ export default function AuthPage() {
         <div className="w-full max-w-sm glass-panel rounded-2xl p-8">
           <div className="mb-8">
             <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 mono mb-2">
-              {mode === "login" ? "// authenticate" : "// create account"}
             </div>
             <h2 className="text-3xl tracking-tight font-semibold" style={{ fontFamily: "Chivo" }}>
               {mode === "login" ? "Sign in" : "Create account"}

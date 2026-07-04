@@ -65,7 +65,7 @@ export default function TimelinePanel({ repoId }) {
   const loadTab = useCallback((t, signal) => {
     if (t === "file" || !TAB_URL[t]) return;
     setLoading(true);
-    setErrors((e) => ({ ...e, [t]: null }));
+    setErrors((e) => (e[t] == null ? e : { ...e, [t]: null }));
     const [url, params] = TAB_URL[t](repoId);
     api.get(url, { params, signal })
       .then((r) => {
