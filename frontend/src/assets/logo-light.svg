@@ -1,0 +1,19 @@
+<svg width="172" height="32" viewBox="0 0 172 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CodeOS AI">
+  <defs>
+    <linearGradient id="codeosIconGradLight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#72DAFF" />
+      <stop offset="50%" stop-color="#52D4F0" />
+      <stop offset="100%" stop-color="#3FC8E8" />
+    </linearGradient>
+    <linearGradient id="codeosAIGradLight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7AE8FF" />
+      <stop offset="100%" stop-color="#52D4F0" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="32" height="32" rx="7" fill="url(#codeosIconGradLight)" />
+  <g transform="translate(7,7) scale(0.75)" stroke="#0A0A0A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="m4 17 6-6-6-6" />
+    <path d="M12 19h8" />
+  </g>
+  <text x="42" y="22" font-family="Chivo, 'Chivo Fallback', sans-serif" font-weight="700" font-size="19" letter-spacing="-0.02em" fill="#FFFFFF">CodeOS<tspan fill="url(#codeosAIGradLight)"> AI</tspan></text>
+</svg>

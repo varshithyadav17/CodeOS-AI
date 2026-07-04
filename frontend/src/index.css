@@ -1,0 +1,197 @@
+@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --bg-base: #0A0A0A;
+    --bg-surface: #121212;
+    --bg-surface-hover: #1A1A1A;
+    --accent: #3FC8E8;
+    --accent-hover: #52D4F0;
+    --node-class: #2979FF;
+    --node-method: #FF9100;
+    --node-function: #FF9100;
+    --node-variable: #00E676;
+    --node-file: #D500F9;
+    --edge-default: rgba(255, 255, 255, 0.15);
+    --edge-active: #3FC8E8;
+
+    /* Glassmorphism design tokens */
+    --glass-bg: rgba(15, 18, 28, 0.50);
+    --glass-bg-hover: rgba(20, 24, 36, 0.62);
+    --glass-bg-soft: rgba(12, 14, 20, 0.35);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-hover: rgba(255, 255, 255, 0.14);
+    --glass-blur: blur(20px);
+    --glass-blur-soft: blur(12px);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+    --glass-radius: 1rem;
+}
+
+@layer base {
+    :root {
+        --background: 0 0% 4%;
+        --foreground: 0 0% 100%;
+        --card: 0 0% 7%;
+        --card-foreground: 0 0% 100%;
+        --popover: 0 0% 7%;
+        --popover-foreground: 0 0% 100%;
+        --primary: 191 79% 58%;
+        --primary-foreground: 0 0% 4%;
+        --secondary: 0 0% 10%;
+        --secondary-foreground: 0 0% 100%;
+        --muted: 0 0% 10%;
+        --muted-foreground: 0 0% 60%;
+        --accent: 0 0% 12%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 4 100% 60%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 0 0% 16%;
+        --input: 0 0% 8%;
+        --ring: 191 79% 58%;
+        --radius: 0.125rem;
+    }
+
+    * { @apply border-border; }
+    html, body, #root {
+        background: var(--bg-base);
+        color: #fff;
+        font-family: 'Inter', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        min-height: 100%;
+    }
+    #root { position: relative; z-index: 1; }
+    body { margin: 0; }
+    h1, h2, h3, h4 { font-family: 'Chivo', sans-serif; letter-spacing: -0.02em; }
+    code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
+}
+
+/* Subtle dot grid background for canvas areas */
+.dot-grid {
+    background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+    background-size: 18px 18px;
+}
+
+/* =========================================================================
+   App background layer — bg_for_other_pages.png fills the whole authenticated
+   app; bgimage.png is reserved for the auth screens. Fixed + cover so the
+   image reads as part of the product identity behind every glass surface.
+   ========================================================================= */
+.app-background {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background-image: linear-gradient(180deg, rgba(6,7,11,0.55) 0%, rgba(6,7,11,0.72) 100%), url('/assets/images/bg_for_other_pages.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+.auth-background {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background-image: linear-gradient(180deg, rgba(4,5,8,0.45) 0%, rgba(4,5,8,0.65) 100%), url('/assets/images/bgimage.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+/* =========================================================================
+   Glassmorphism primitives — every floating surface (cards, sidebar, topbar,
+   dialogs, drawers, popovers, dropdowns, command palette) draws from these.
+   ========================================================================= */
+.glass-panel {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+}
+
+.glass-panel-soft {
+    background: var(--glass-bg-soft);
+    -webkit-backdrop-filter: var(--glass-blur-soft);
+    backdrop-filter: var(--glass-blur-soft);
+    border: 1px solid var(--glass-border);
+}
+
+.glass-panel-hover {
+    background: var(--glass-bg-hover);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border-hover);
+}
+
+.glass-interactive {
+    transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+}
+.glass-interactive:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+    transform: translateY(-1px);
+}
+
+/* Graph node cards (Knowledge Graph / Architecture): kept solid, no blur.
+   Hundreds of these can render at once, so per-node backdrop-filter is a
+   real performance cost, and translucency also fights with overlapping
+   edges and node-type colors that need to stay legible. */
+.graph-node-surface {
+    background: rgba(16, 18, 26, 0.92);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Scrollbar — thin, rounded, dark */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); background-clip: padding-box; }
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
+
+/* React Flow overrides */
+.react-flow__background { background: var(--bg-base); }
+.react-flow__node {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+.react-flow__edge-path { stroke: var(--edge-default); stroke-width: 1.2; }
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path { stroke: var(--edge-active); stroke-width: 2; }
+.react-flow__attribution { display: none !important; }
+
+/* React Flow's zoom/fit Controls widget ships inline default styles per
+   button, so a plain custom class can't win the specificity fight —
+   these need real !important overrides to read as glass chrome. */
+.rf-controls-glass {
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 0.5rem !important;
+    overflow: hidden;
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+}
+.rf-controls-glass button {
+    background: transparent !important;
+    border-bottom: 1px solid var(--glass-border) !important;
+    color: rgba(255, 255, 255, 0.75) !important;
+    fill: rgba(255, 255, 255, 0.75) !important;
+}
+.rf-controls-glass button:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #fff !important;
+}
+
+/* Animations */
+@keyframes pulse-accent {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(63, 200, 232, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(63, 200, 232, 0); }
+}
+.pulse-accent { animation: pulse-accent 2s infinite; }
+
+.glow-accent { box-shadow: 0 0 12px rgba(63, 200, 232, 0.35); }

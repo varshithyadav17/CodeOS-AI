@@ -1,0 +1,105 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) tailored for Developer Tools",
+  "design_philosophy": "IDE-meets-Dashboard. Deep void black backgrounds, stark high-contrast typography, and a single electric accent color to focus attention. UI should feel like a command center: dense, precise, and unobstructed by decorative elements.",
+  "typography": {
+    "heading_font": "Chivo",
+    "body_font": "Inter",
+    "mono_font": "JetBrains Mono",
+    "scale": {
+      "h1": "text-4xl tracking-tighter font-semibold",
+      "h2": "text-2xl tracking-tight font-medium",
+      "h3": "text-xl tracking-tight font-medium",
+      "body": "text-sm text-white/80",
+      "small_label": "text-xs tracking-[0.1em] uppercase font-mono text-white/50"
+    }
+  },
+  "colors": {
+    "background": {
+      "base": "#0A0A0A",
+      "surface": "#121212",
+      "surface_hover": "#1A1A1A"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "rgba(255,255,255,0.7)",
+      "muted": "rgba(255,255,255,0.4)"
+    },
+    "border": {
+      "default": "rgba(255,255,255,0.1)",
+      "focus": "rgba(0, 229, 255, 0.5)"
+    },
+    "accents": {
+      "primary": "#00E5FF",
+      "primary_hover": "#00B8CC",
+      "warning": "#FFB300",
+      "error": "#FF3B30",
+      "success": "#34C759"
+    },
+    "knowledge_graph": {
+      "node_class": "#2979FF",
+      "node_method": "#FF9100",
+      "node_variable": "#00E676",
+      "node_file": "#D500F9",
+      "edge_default": "rgba(255,255,255,0.15)",
+      "edge_active": "#00E5FF",
+      "node_focus_border": "#FFFFFF"
+    }
+  },
+  "layout_and_spacing": {
+    "strategy": "Control Room Grid (Dense, functional, IDE-like).",
+    "border_radius": "rounded-sm",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-12 gap-4",
+    "panels": "border border-white/10 bg-[#121212]",
+    "padding": "p-4 md:p-6"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#00E5FF] text-black font-medium hover:bg-[#00B8CC] transition-colors rounded-sm px-4 py-2 text-sm",
+      "secondary": "bg-transparent border border-white/10 text-white hover:bg-white/5 transition-colors rounded-sm px-4 py-2 text-sm"
+    },
+    "cards": {
+      "style": "bg-[#121212] border border-white/10 rounded-sm p-4 relative overflow-hidden group",
+      "hover_effect": "hover:border-white/30 transition-colors"
+    },
+    "sidebar": {
+      "style": "w-64 bg-[#0A0A0A] border-r border-white/10 flex flex-col h-screen",
+      "link_active": "bg-white/10 text-white border-l-2 border-[#00E5FF]",
+      "link_inactive": "text-white/60 hover:text-white hover:bg-white/5"
+    },
+    "inputs": {
+      "style": "bg-[#0A0A0A] border border-white/10 rounded-sm text-white focus:border-[#00E5FF] focus:ring-1 focus:ring-[#00E5FF] transition-all px-3 py-2 text-sm placeholder:text-white/30"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Avoid heavy glassmorphism for this domain. Use solid, opaque layers (#121212) with crisp 1px borders to maintain an IDE/Terminal aesthetic.",
+    "glow_effects": "Use subtle drop-shadows on active graph nodes or primary CTAs. drop-shadow-[0_0_8px_rgba(0,229,255,0.4)]",
+    "grid_background": "For the Knowledge Graph and Architecture Viewer, use an SVG dot pattern background (fill-white/5) to represent a canvas."
+  },
+  "motion_and_interactions": {
+    "hover_states": "Fast, crisp transitions (duration-150 ease-out). Changes in border opacity rather than background color.",
+    "graph_interactions": "When hovering over a node, dim all non-connected nodes to opacity-30. Highlight connected edges with the active accent color (#00E5FF)."
+  },
+  "icons_and_assets": {
+    "icon_library": "lucide-react (Technical, clean, consistent line weights)",
+    "logo_strategy": "Use react-icons (FaGithub, FcGoogle) for OAuth and repository connections instead of raster images.",
+    "media": [
+      {
+        "category": "abstract_background",
+        "url": "https://images.pexels.com/photos/30766684/pexels-photo-30766684.png",
+        "description": "Abstract 3D network structure for auth screen background or empty states"
+      }
+    ]
+  },
+  "testing_attributes": {
+    "instruction": "All interactive and key informational elements MUST include a `data-testid` attribute. Convention: kebab-case, role-based. e.g., `data-testid=\"repo-upload-button\"`."
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the dark mode IDE aesthetic. Do not use generic light gray backgrounds.",
+    "For the Knowledge Graph (React Flow), use the custom colors defined in `knowledge_graph` to ensure readability. Disable default edge rendering and use custom bezier curves with dimming logic on hover.",
+    "Install `lucide-react` for standard UI icons and `react-icons` for brand logos (Google, GitHub).",
+    "Use Shadcn UI components but override their default `rounded-md` classes to `rounded-sm` or `rounded-none` for a sharper, more technical look.",
+    "Implement the 'Control Room' grid layout for the dashboard. Use explicit borders (`border-white/10`) to separate sections instead of soft shadows.",
+    "Ensure the Chat Interface features streaming text with `JetBrains Mono` for code blocks, maintaining syntax highlighting contrast."
+  ]
+}
