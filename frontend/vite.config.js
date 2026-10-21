@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import svgr from 'vite-plugin-svgr';
 import path from 'node:path';
 
 // Standalone Vite configuration.
@@ -13,41 +14,37 @@ import path from 'node:path';
 export default defineConfig(({ mode }) => {
   // Load env vars from .env / .env.local so they are visible to the
   // config (Vite normally only exposes them to client code).
-  loadEnv(mode, process.cwd(), '');
-  const port = Number(process.env.PORT) || 5173;
+  const env = { ...loadEnv(mode, process.cwd(), ''), ...process.env };
+  const localHeaders = { 'Cross-Origin-Opener-Policy': 'same-origin-allow-popups', 'Referrer-Policy': 'no-referrer-when-downgrade' };
+  const port = Number(env.PORT) || 5173;
 
   return {
     plugins: [
+      svgr(),
       react({
         include: /\.(js|jsx|ts|tsx)$/,
       }),
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
-      },
-    },
-    esbuild: {
-      loader: 'jsx',
-      include: /src\/.*\.(js|jsx)$/,
-      exclude: [],
-    },
-    optimizeDeps: {
-      esbuildOptions: {
-        loader: { '.js': 'jsx' },
+        '@': path.resolve(import.meta.dirname, './src'),
       },
     },
     server: {
+      headers: localHeaders,
       host: '0.0.0.0',
       port,
       strictPort: false,
       // Allow the platform preview proxy host (and any future host) to
       // reach the dev server; Vite 5 blocks unknown hosts by default.
-      allowedHosts: true,
+      allowedHosts: env.VITE_ALLOWED_HOSTS?.split(",").map((host) => host.trim()).filter(Boolean) || ["localhost", "127.0.0.1"],
+      proxy: { "/api": { target: env.API_PROXY_TARGET || "http://127.0.0.1:8000", changeOrigin: true } },
     },
     preview: {
+      headers: localHeaders,
       host: '0.0.0.0',
       port: 4173,
+      proxy: { "/api": { target: env.API_PROXY_TARGET || "http://127.0.0.1:8000", changeOrigin: true } },
     },
     build: {
       outDir: 'dist',

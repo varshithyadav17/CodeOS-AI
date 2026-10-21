@@ -1,47 +1,16 @@
-# IDE
-.vscode/
-.idea/
-*.code-workspace
-
-# Node
+.env
+.env.*
+!.env.example
+.venv/
 node_modules/
 dist/
-build/
-
-# Python
 __pycache__/
-*.py[cod]
-.venv/
-venv/
-
-# Environment
-.env
-.env.local
-backend/.env
-frontend/.env
-!.env.example
-
-# Logs
-*.log
-logs/
-
-# Cache
-.cache/
+*.pyc
 .pytest_cache/
-.mypy_cache/
-
-# Coverage
-coverage/
-.coverage
+.ruff_cache/
+*.db
+*.sqlite
+coverage.xml
 htmlcov/
-
-# Generated
-uploads/
-generated/
-artifacts/
-
-# OS
-.DS_Store
-Thumbs.db
-Desktop.ini
-.history/
+playwright-report/
+test-results/

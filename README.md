@@ -1,56 +1,109 @@
 # CodeOS AI
 
-CodeOS AI is an AI-powered software engineering workspace designed to help developers understand, explore, and analyze large codebases. It combines repository intelligence, architecture visualization, knowledge graphs, AI-assisted documentation, and conversational code understanding into a unified interface.
+Codebase intelligence with semantic code retrieval, a structural knowledge graph, and answers linked to source files and line ranges.
 
-## Features
+This source checkpoint upgrades the supplied React application to **React + Vite + Tailwind, FastAPI, PostgreSQL, S3, Neo4j, Qdrant, and Gemini**. The frontend sends application operations to FastAPI; Google sign-in uses Google Identity Services. Repository source exists permanently as an original ZIP in object storage; clones and extracted workspaces are temporary.
 
-- Repository analysis and exploration
-- AI-powered code assistant
-- Interactive Knowledge Graph
-- Architecture visualization
-- Engineering Memory
-- Timeline analysis
-- AI-generated documentation
-- Automated code reviews
+**Read [docs/VERIFICATION.md](docs/VERIFICATION.md) before deployment.** The 70-test backend suite, real Neo4j/Qdrant adapter checks, and 27 production-build browser workflow checks passed. AWS, live PostgreSQL concurrency, real Gemini calls, private GitHub access, and a complete Docker startup still need verification in your deployment environment. No API keys or existing application database were supplied with the source archive.
 
-## Tech Stack
+## Start with Docker Desktop
 
-### Frontend
-- React
-- Vite
-- Tailwind CSS
-- React Flow
+Prerequisites: Docker with Compose v2, Python 3.10+ for the small configuration helper, and a Gemini API key with access to the configured generation and embedding models. Allow roughly 4 GB of memory for the local stack.
 
-### Backend
-- FastAPI
-- MongoDB
+1. Extract the ZIP and open a terminal in the `CodeOS-AI` folder.
+2. Optionally verify the untouched extracted source, then generate separate random local credentials:
 
-### AI
-- Google Gemini
+   ```bash
+   python scripts/verify_source.py
+   python scripts/configure.py
+   ```
 
-## Getting Started
+3. Edit the generated `.env` and fill in `GEMINI_API_KEY`. The defaults use `gemini-3.8-flash` for generation and `gemini-embedding-001` with 768-dimensional cosine vectors for retrieval. Both model names are configurable. Choose models available to your account.
+4. Start the stack:
 
-### Frontend
+   ```bash
+   docker compose up --build -d
+   docker compose ps
+   ```
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+5. Open **http://localhost:8080**, create an account, and upload a small ZIP. Local development builds the official MinIO source release as an S3-compatible object store; its first build compiles Go dependencies. Production uses your AWS S3 bucket.
+6. Verify the actual service configuration, including two small Gemini requests:
 
-### Backend
+   ```bash
+   docker compose exec backend python scripts/check_services.py --ai
+   ```
+
+7. Run the complete live API lifecycle check after creating your account:
+
+   ```bash
+   docker compose exec backend python scripts/smoke_api.py --base-url http://localhost:8000 --email you@example.com
+   ```
+
+   Enter your CodeOS password when prompted. The script uploads a small test repository, checks indexing, file preview, graph relationships, chat evidence and re-ingestion, then deletes the test repository.
+
+View logs with `docker compose logs -f backend`. Use `docker compose down` to stop services while keeping data volumes. `docker compose down -v` removes all local database and archive data.
+
+## Native development
+
+Use **Python 3.12** and **Node 22.12+**. Start PostgreSQL, Neo4j, Qdrant and an S3 bucket first. The Compose services can supply these dependencies locally.
+
+Backend:
 
 ```bash
 cd backend
 python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn server:app --reload
+# Copy .env.example to .env; fill database, JWT, storage, Neo4j and Gemini values.
+alembic upgrade head
+uvicorn server:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## Project Status
+Frontend, in a separate terminal:
 
-This project is under active development, with ongoing improvements to repository intelligence, AI workflows, and developer experience.
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open http://localhost:5173. Vite proxies `/api` to the backend. A deployed frontend should use the included nginx configuration, which serves the SPA and proxies the API on the same origin. Google sign-in is optional: set `GOOGLE_CLIENT_ID` on the backend and authorize the actual frontend origin in Google Cloud. The frontend reads it at runtime. Follow [docs/GOOGLE_SIGN_IN.md](docs/GOOGLE_SIGN_IN.md).
+
+## What is included
+
+- Existing dark UI, authentication, repository workspace, engineering memory, reviews and architecture tools.
+- Google sign-in with browser nonces, permanent subject identity, password-confirmed linking and recovery.
+- Documentation workspace with ten generators, saved Markdown, regeneration and ZIP export.
+- Streamed, bounded ZIP upload; safe extraction; GitHub import with an optional **user-provided** private-repository token.
+- Stable repository-scoped graph and chunk IDs; idempotent indexing and archive-based re-ingestion.
+- PostgreSQL job records with retries, leases, cancellation, per-repository PostgreSQL advisory locks, and retryable cross-store cleanup.
+- Python AST and tree-sitter analysis, full-source chunk windows, imports, classes, functions and best-effort static calls.
+- Gemini document/query embeddings stored exclusively in Qdrant; model/dimension/distance compatibility checks.
+- Hybrid retrieval that combines code evidence with Neo4j relationships. Source excerpts, file paths and line references persist with conversations.
+- Ownership checks, HttpOnly cookies, CSRF origin checks, safe GitHub URLs, archive limits, secret-file exclusions, and bounded external calls.
+- Version-aware S3 deletion, related-record cascades, service health checks, migrations, Docker files, and automated tests.
+- Paged graph browsing, combined memory search and filters, updated memory counts, and compact mobile navigation.
+
+See [docs/PRODUCT_AUDIT.md](docs/PRODUCT_AUDIT.md) for the feature-by-feature audit, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SETUP.md](docs/SETUP.md), [docs/CHECKPOINTS.md](docs/CHECKPOINTS.md), and [docs/EMERGENT_HANDOFF.md](docs/EMERGENT_HANDOFF.md).
+
+## Run tests
+
+From the project root, with the backend virtual environment activated:
+
+```bash
+pip install -r backend/requirements-dev.txt
+python -m pytest -q
+ruff check backend --select F
+```
+
+From `frontend`:
+
+```bash
+npm ci
+npm run lint
+npm run build
+npm audit
+```
+
+The default suite uses isolated SQLite application records, a graph test double, the actual Qdrant local implementation, S3 API simulation, and deterministic AI/embedding substitutes. **No production fallback to these substitutes exists.** Opt-in tests against real PostgreSQL, Neo4j and Qdrant are documented in the verification report.
