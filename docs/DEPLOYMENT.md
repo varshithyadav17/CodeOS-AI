@@ -47,9 +47,9 @@ Configure:
 
 Use the existing Vercel project and Git connection. Root directory: `frontend`; framework: Vite; Node: 24; build: `npm run build`; output: `dist`.
 
-Set `RENDER_BACKEND_ORIGIN` to the **confirmed HTTPS origin of the existing Render service**, without `/api` or another path. Set it for the environments that will be deployed. Remove `VITE_BACKEND_URL` on Vercel.
+After confirming the existing Render URL, run `python scripts/configure_vercel.py https://ACTUAL-RENDER-SERVICE.onrender.com` and commit the generated `frontend/vercel.json` before deployment. Use the actual service origin without `/api`; the example is not a deployable address. The script validates the origin and prepends the API proxy route. Remove `VITE_BACKEND_URL` on Vercel.
 
-`frontend/vercel.mjs` validates this address at deployment time and supplies API forwarding, SPA deep links, non-cached API responses, and Google's popup-compatible opener policy. Browser requests stay on the frontend origin so session and Google challenge cookies work without third-party-cookie dependence. Missing configuration fails deployment clearly instead of silently producing an unconnected frontend.
+The checked-in configuration supplies the real SPA routes and popup/cache headers, but deliberately has no invented API destination. Until configured, previews can render the frontend but cannot use the backend. Vercel rejected the earlier dynamic configuration, so routing now uses the supported static JSON format. Browser requests use the same-origin `/api` proxy once the actual destination is written, preserving session and Google challenge cookies.
 
 ## Google sign-in
 
