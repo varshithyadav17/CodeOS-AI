@@ -1,0 +1,88 @@
+# CodeOS only. Review the paid resources and provider settings before applying.
+# See docs/RENDER_SETUP.md. No resources have been created by committing this file.
+# The service follows the branch selected when this Blueprint is installed.
+previews:
+  generation: 'off'
+
+services:
+  - type: web
+    name: codeos-api
+    runtime: docker
+    repo: https://github.com/varshithyadav17/CodeOS-AI
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    preDeployCommand: alembic upgrade head && python scripts/check_services.py
+    healthCheckPath: /api/health/live
+    maxShutdownDelaySeconds: 120
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: codeos-db
+          property: connectionString
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_COOKIE_SAMESITE
+        value: lax
+      - key: CORS_ORIGINS
+        value: https://codeos-ai-two.vercel.app
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: gemini-3.8-flash
+      - key: EMBEDDING_MODEL
+        value: gemini-embedding-001
+      - key: EMBEDDING_DIMENSIONS
+        value: "768"
+      - key: S3_BUCKET
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ENCRYPTION
+        value: AES256
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: NEO4J_DATABASE
+        value: neo4j
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION
+        value: codeos_gemini_768_v1
+      - key: WORKER_ENABLED
+        value: "true"
+      - key: AI_TIMEOUT_SECONDS
+        value: "90"
+      - key: INTERACTIVE_TIMEOUT_SECONDS
+        value: "105"
+
+databases:
+  - name: codeos-db
+    region: singapore
+    plan: 0.1c-256mb
+    postgresMajorVersion: "16"
+    databaseName: codeos
+    user: codeos
+    diskSizeGB: 1
+    storageAutoscalingEnabled: false
+    ipAllowList: []

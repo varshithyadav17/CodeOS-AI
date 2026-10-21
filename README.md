@@ -4,7 +4,7 @@ Codebase intelligence with semantic code retrieval, a structural knowledge graph
 
 This source checkpoint upgrades the supplied React application to **React + Vite + Tailwind, FastAPI, PostgreSQL, S3, Neo4j, Qdrant, and Gemini**. The frontend sends application operations to FastAPI; Google sign-in uses Google Identity Services. Repository source exists permanently as an original ZIP in object storage; clones and extracted workspaces are temporary.
 
-**Read [docs/VERIFICATION.md](docs/VERIFICATION.md) before deployment.** The 70-test backend suite, real Neo4j/Qdrant adapter checks, and 27 production-build browser workflow checks passed. AWS, live PostgreSQL concurrency, real Gemini calls, private GitHub access, and a complete Docker startup still need verification in your deployment environment. No API keys or existing application database were supplied with the source archive.
+**Read [docs/VERIFICATION.md](docs/VERIFICATION.md) before deployment.** GitHub CI passed 76 backend tests (including PostgreSQL concurrency) and 31 production-build browser checks. Earlier real Neo4j/Qdrant adapter checks also passed. Browser AI and Google flows use explicit test substitutes. AWS permissions, real Gemini calls, Google consent, private GitHub imports, the complete Docker startup, and production load still need live verification. No API keys or existing application database were supplied with the source archive.
 
 ## Start with Docker Desktop
 
@@ -111,3 +111,5 @@ The default suite uses isolated SQLite application records, a graph test double,
 ## Existing Vercel and Render deployment
 
 See [deployment and cutover instructions](docs/DEPLOYMENT.md) for the confirmed project, API routing, Google configuration, data preservation, and automatic updates.
+
+The confirmed Render workspace has no CodeOS backend yet. [The prepared Render setup](docs/RENDER_SETUP.md) defines the new API and PostgreSQL database, required provider settings, and costs. Applying `render.yaml` creates paid resources; the file has not been applied.

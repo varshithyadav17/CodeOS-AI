@@ -49,6 +49,16 @@ jobs:
       - run: npm ci --prefix frontend
       - run: python -m ruff check backend --select F
       - run: python -m pytest -q
+      - name: Build Render API image
+        run: docker build --tag codeos-api:ci ./backend
+      - name: Check container runtime
+        run: >-
+          docker run --rm codeos-api:ci python -c
+          "import os, shutil; from app.main import app;
+          assert os.getuid() != 0;
+          assert shutil.which('git');
+          assert any(route.path == '/api/health/live' for route in app.routes);
+          print('PASS non-root container, Git and API imports')"
       - run: npm run lint --prefix frontend
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/verify_browser.py

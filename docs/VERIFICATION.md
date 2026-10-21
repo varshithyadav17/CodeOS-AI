@@ -1,13 +1,14 @@
-# Deployment candidate checks — 2026-10-21
+# Deployment candidate checks — 2026-10-22
 
 The deployment branch restores Dashboard and Timeline, retains a visible Google option when configuration is absent, adds Render port/PostgreSQL URL support, bounds interactive AI requests, and supplies Vercel API/SPA routing plus CI.
 
 - GitHub CI on commit `34a6bdd`: **76 passed, 3 skipped**, including the real PostgreSQL concurrency check. Local backend run: 75 passed, 4 skipped. Live Neo4j/Qdrant and GitHub integration checks were not rerun.
 - Frontend lint and production build: passed. Runtime npm audit: **0 vulnerabilities**.
 - Python import/name lint and dependency consistency: passed.
-- Vercel rejected dynamic configuration during its preview attempt. Static SPA configuration and an origin-validating API proxy setup script replace it; the actual Render destination still requires workspace confirmation.
+- Vercel rejected dynamic configuration during its preview attempt. Static SPA configuration and an origin-validating API proxy setup script replace it. The preview at commit `f3ffe47` is READY, and that commit's GitHub CI also passed. The actual API destination is still missing because the confirmed Render workspace has no CodeOS backend.
 - GitHub CI browser suite: **31 checks passed, zero uncaught browser errors**, against the production build. Covers restored Dashboard/Timeline and visible unavailable Google state. AI, Google, and populated Timeline data use explicit substitutes. See [CI browser results](DEPLOYMENT-BROWSER-RESULTS.json). Local Chromium downloads were unavailable; CI completed these checks successfully.
-- Live Google consent, provider credentials, existing MongoDB data transfer, Render service configuration, and production rollout remain unverified. See [deployment instructions](DEPLOYMENT.md).
+- Render inspection found only QuickChat and no PostgreSQL instances. The CodeOS-only Blueprint is prepared for a new backend/database; it has not been applied. See [Render setup and required settings](RENDER_SETUP.md).
+- Live Google consent, provider credentials, any existing MongoDB data transfer, CodeOS service configuration, and production rollout remain unverified. See [deployment instructions](DEPLOYMENT.md).
 
 The report below records earlier source verification and remains historical evidence only.
 
