@@ -57,7 +57,7 @@ jobs:
           "import os, shutil; from app.main import app;
           assert os.getuid() != 0;
           assert shutil.which('git');
-          assert any(route.path == '/api/health/live' for route in app.routes);
+          assert '/api/health/live' in app.openapi()['paths'];
           print('PASS non-root container, Git and API imports')"
       - run: npm run lint --prefix frontend
       - run: python -m playwright install --with-deps chromium
