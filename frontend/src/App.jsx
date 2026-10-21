@@ -12,6 +12,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import AuthPage from "./pages/Login/Login";
 const Repositories = lazy(() => import("./pages/Repositories"));
 const RepoDetail = lazy(() => import("./pages/Repository"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 const MemoryPage = lazy(() => import("./pages/Memory"));
 
 function PageFallback() {
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/auth/callback" element={<Navigate to="/login" replace />} />
         <Route element={<Protected><AppLayout /></Protected>}>
           <Route path="/" element={<Navigate to="/repositories" replace />} />
+          <Route path="/dashboard" element={<ErrorBoundary label="Dashboard"><Suspense fallback={<PageFallback />}><Dashboard /></Suspense></ErrorBoundary>} />
           <Route path="/repositories" element={<ErrorBoundary label="Repositories"><Suspense fallback={<PageFallback />}><Repositories /></Suspense></ErrorBoundary>} />
           <Route path="/repositories/:id" element={<ErrorBoundary label="Repository workspace"><Suspense fallback={<PageFallback />}><RepoDetail /></Suspense></ErrorBoundary>} />
           <Route path="/memory" element={<ErrorBoundary label="Engineering Memory"><Suspense fallback={<PageFallback />}><MemoryPage /></Suspense></ErrorBoundary>} />

@@ -1,3 +1,18 @@
+# Deployment candidate checks — 2026-10-21
+
+The deployment branch restores Dashboard and Timeline, retains a visible Google option when configuration is absent, adds Render port/PostgreSQL URL support, bounds interactive AI requests, and supplies Vercel API/SPA routing plus CI.
+
+- Backend: **75 passed, 4 skipped** in the deployment preparation session. Live PostgreSQL, Neo4j/Qdrant, and GitHub checks require their opt-in services.
+- Frontend lint and production build: passed. Runtime npm audit: **0 vulnerabilities**.
+- Python import/name lint and dependency consistency: passed.
+- Vercel routing and invalid-origin rejection checked locally. Deployment requires the confirmed Render origin.
+- Expanded browser suite is prepared. Chromium download endpoints returned an HTML unavailable page in this environment, so this branch's expanded browser checks are not yet verified. The older browser results below do not cover the new screens.
+- Live Google consent, provider credentials, existing MongoDB data transfer, Render service configuration, and production rollout remain unverified. See [deployment instructions](DEPLOYMENT.md).
+
+The report below records earlier source verification and remains historical evidence only.
+
+---
+
 # Verification report
 
 Checkpoint date: 19 October 2026 (India). The checks below describe what actually ran in the build environment. They do not certify an unconfigured cloud deployment.

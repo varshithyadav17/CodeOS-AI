@@ -55,10 +55,60 @@ async def main():
         await page.get_by_test_id("zip-file-input").set_input_files({"name":"browser-repo.zip","mimeType":"application/zip","buffer":data.getvalue()})
         await page.get_by_test_id("upload-zip-button").click()
         await expect(page.get_by_text("ready",exact=True)).to_be_visible(timeout=20000)
+        await page.get_by_test_id("nav-dashboard").click()
+        await expect(page.get_by_test_id("stat-repos")).to_contain_text("1")
+        await expect(page.get_by_test_id("stat-files")).to_contain_text("3")
+        await expect(page.get_by_text("Uploaded browser-repo", exact=True)).to_be_visible()
+        await page.route("**/api/stats", lambda route: route.fulfill(status=503, content_type="application/json", body='{"detail":"Statistics temporarily unavailable"}'))
+        await page.reload()
+        await expect(page.get_by_test_id("dashboard-error")).to_contain_text("Statistics temporarily unavailable")
+        await page.unroute("**/api/stats")
+        await page.get_by_test_id("dashboard-error").get_by_role("button", name="Retry").click()
+        await expect(page.get_by_test_id("stat-files")).to_contain_text("3")
+        checks.append("Dashboard uses actual repository counts and activity, with error recovery")
+        await page.get_by_test_id("dashboard-add-repo").click()
         await page.get_by_role("link",name="browser-repo",exact=True).click()
         repo_id = page.url.rsplit("/", 1)[-1]
         await expect(page.get_by_test_id("tab-files")).to_be_visible(timeout=15000)
         checks.append("ZIP upload, background ingestion, status polling")
+        await page.get_by_test_id("tab-timeline").click()
+        await expect(page.get_by_test_id("timeline-unavailable")).to_be_visible()
+        checks.append("ZIP repository timeline explains that Git history is unavailable")
+        history = [{"sha": "abc123456789", "message": "Improve authentication", "author": "Test Author", "date": "2026-10-21T10:00:00Z", "insertions": 4, "deletions": 1}]
+        timeline = {
+            "commits": {"available": True, "shallow": True, "commits": history},
+            "hotspots": {"items": [{"path": "auth.py", "changes": 2, "authors": 1, "insertions": 4, "deletions": 1}]},
+            "contributors": {"items": [{"author": "Test Author", "email": "author@example.test", "commits": 2}]},
+            "complexity": {"trend": [{"from": "2026-10-20", "to": "2026-10-21", "commits": 2, "churn": 5}]},
+            "file": {"history": history},
+        }
+        async def timeline_response(route):
+            endpoint = route.request.url.rsplit("/", 1)[-1].split("?", 1)[0]
+            await route.fulfill(content_type="application/json", body=json.dumps(timeline[endpoint]))
+        timeline_pattern = f"**/api/repos/{repo_id}/timeline/**"
+        await page.route(timeline_pattern, lambda route: route.fulfill(status=503, content_type="application/json", body='{"detail":"History temporarily unavailable"}'))
+        await page.get_by_test_id("tab-files").click()
+        await page.get_by_test_id("tab-timeline").click()
+        await expect(page.get_by_test_id("timeline-error")).to_contain_text("History temporarily unavailable")
+        await page.unroute(timeline_pattern)
+        await page.route(timeline_pattern, timeline_response)
+        await page.get_by_test_id("timeline-error").get_by_role("button", name="Retry").click()
+        await expect(page.get_by_test_id("timeline-scope")).to_contain_text("shallow clone")
+        await expect(page.get_by_test_id("timeline-commits")).to_contain_text("Improve authentication")
+        await page.get_by_role("searchbox", name="Search timeline").fill("absent")
+        await expect(page.get_by_text("No matching history", exact=True)).to_be_visible()
+        await page.get_by_test_id("timeline-view-contributors").click()
+        await expect(page.get_by_text("author@example.test", exact=True)).to_be_visible()
+        await page.get_by_test_id("timeline-view-complexity").click()
+        await expect(page.get_by_test_id("timeline-churn")).to_contain_text("5 lines")
+        await page.get_by_test_id("timeline-view-hotspots").click()
+        await page.get_by_role("button", name="auth.py", exact=True).click()
+        await expect(page.get_by_label("File", exact=True)).to_have_value("auth.py")
+        await expect(page.get_by_test_id("timeline-commits")).to_contain_text("Improve authentication")
+        await page.get_by_role("button", name="Open current source").click()
+        await expect(page.get_by_test_id("file-content-pre")).to_contain_text("def authenticate")
+        await page.unroute(timeline_pattern)
+        checks.append("Timeline snapshot fixture: commits, search, hotspots, contributors, churn, file history, source navigation and retry")
         await page.get_by_test_id("tab-files").click()
         await page.get_by_test_id("file-auth.py").click()
         await expect(page.get_by_test_id("file-content-pre")).to_contain_text("def authenticate",timeout=10000)
@@ -218,11 +268,20 @@ async def main():
         await blocked.goto("http://127.0.0.1:5173/login")
         await expect(blocked.get_by_role("alert")).to_contain_text("could not load", timeout=20000)
         await expect(blocked.get_by_test_id("auth-submit-button")).to_be_enabled()
+        await expect(blocked.get_by_test_id("google-unavailable-button")).to_be_disabled()
         await blocked.close()
         checks.append("Blocked Google script shows recovery while email sign-in remains usable")
+        unconfigured = await browser.new_page()
+        await unconfigured.route("**/api/auth/google/challenge", lambda route: route.fulfill(content_type="application/json", body='{"enabled":false}'))
+        await unconfigured.goto("http://127.0.0.1:5173/login")
+        await expect(unconfigured.get_by_test_id("google-unavailable-button")).to_be_visible()
+        await expect(unconfigured.get_by_test_id("google-unavailable-button")).to_be_disabled()
+        await expect(unconfigured.get_by_test_id("auth-submit-button")).to_be_enabled()
+        await unconfigured.close()
+        checks.append("Missing Google configuration keeps the Google option visible and email login enabled")
         assert not errors,errors
         await browser.close()
-    report={"status":"passed","checks":checks,"uncaught_browser_errors":errors,"providers":"SQLite, in-memory graph, real Qdrant local, deterministic embeddings and AI stub; GIS JavaScript and Google verifier stubs"}
+    report={"status":"passed","checks":checks,"uncaught_browser_errors":errors,"providers":"SQLite, in-memory graph, real Qdrant local, deterministic embeddings and AI stub; GIS JavaScript and Google verifier stubs; populated Timeline views use explicit HTTP fixtures"}
     if os.getenv("CODEOS_BROWSER_REPORT"):
         Path(os.environ["CODEOS_BROWSER_REPORT"]).write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report,indent=2))

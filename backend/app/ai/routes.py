@@ -1,6 +1,7 @@
 """AI routes: chat, reviews, architecture analysis, and documentation."""
 from __future__ import annotations
 import io
+import asyncio
 import logging
 import zipfile
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from ..auth.auth import get_current_user
+from ..config import settings
 from ..database import (
     get_repo_repo, get_graph_service, get_vector_store,
     get_conversation_repo, get_message_repo,
@@ -68,7 +70,11 @@ async def ask(
         raise HTTPException(409, "Repository must be ready before asking questions.")
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Empty message")
-    result = await chat.ask(repo.id, user.id, body.conversation_id, body.message)
+    try:
+        async with asyncio.timeout(settings.INTERACTIVE_TIMEOUT_SECONDS):
+            result = await chat.ask(repo.id, user.id, body.conversation_id, body.message)
+    except TimeoutError:
+        raise HTTPException(503, "The answer took too long. Please try a more specific question or retry.")
     await get_activity_repo().insert(ActivityEvent(
         user_id=user.id, repo_id=repo.id, type="chat",
         message=f"Asked: {body.message[:60]}",
@@ -114,7 +120,6 @@ async def start_review(
         raise HTTPException(status_code=404, detail="Repository not found")
     if repo.status != "ready":
         raise HTTPException(status_code=400, detail=f"Repository must be 'ready' (current: {repo.status})")
-    from ..config import settings
     from ..jobs import enqueue
     if not settings.GEMINI_API_KEY:
         raise HTTPException(503, "Set GEMINI_API_KEY to enable code review.")
@@ -245,9 +250,12 @@ async def generate_doc(repo_id: str, body: GenIn, user: User = Depends(get_curre
     if body.doc_type not in DOC_TYPES:
         raise HTTPException(status_code=400, detail="Unknown doc type")
     try:
-        return await _doc_svc().generate(repo, body.doc_type, user.id)
+        async with asyncio.timeout(settings.INTERACTIVE_TIMEOUT_SECONDS):
+            return await _doc_svc().generate(repo, body.doc_type, user.id)
     except HTTPException:
         raise
+    except TimeoutError:
+        raise HTTPException(503, "Documentation generation took too long. Please retry.")
     except RuntimeError:
         raise HTTPException(503, "AI documentation is unavailable. Check Gemini configuration and try again.")
     except Exception:

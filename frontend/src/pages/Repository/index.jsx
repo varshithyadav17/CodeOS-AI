@@ -15,12 +15,13 @@ const ReviewPanel = lazy(() => import("./ReviewPanel"));
 const ArchitecturePanel = lazy(() => import("./ArchitecturePanel"));
 const DocumentationPanel = lazy(() => import("./DocumentationPanel"));
 const FilesPanel = lazy(() => import("./FilesPanel"));
+const TimelinePanel = lazy(() => import("./TimelinePanel"));
 
 function PanelFallback() {
   return <SkeletonGrid cols={1} count={3} cardClassName="h-16" />;
 }
 
-const TAB_KEYS = ["chat", "review", "arch", "graph", "files", "docs"];
+const TAB_KEYS = ["chat", "review", "arch", "graph", "files", "docs", "timeline"];
 
 function Workspace() {
   const { repo, graph, activeTab, setActiveTab, selectFile, selectNode, clearSelection } = useWorkspace();
@@ -41,7 +42,7 @@ function Workspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keyboard shortcuts: 1-6 to jump tabs, Esc to clear selection.
+  // Keyboard shortcuts: 1-7 to jump tabs, Esc to clear selection.
   useEffect(() => {
     const handler = (e) => {
       const tag = document.activeElement?.tagName;
@@ -66,6 +67,7 @@ function Workspace() {
         <TabsTrigger value="graph" data-testid="tab-graph" className="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60 rounded-sm transition-colors duration-150">Knowledge Graph</TabsTrigger>
         <TabsTrigger value="files" data-testid="tab-files" className="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60 rounded-sm transition-colors duration-150">Files</TabsTrigger>
         <TabsTrigger value="docs" data-testid="tab-docs" className="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60 rounded-sm transition-colors duration-150">Documentation</TabsTrigger>
+        <TabsTrigger value="timeline" data-testid="tab-timeline" className="text-xs data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60 rounded-sm transition-colors duration-150">Timeline</TabsTrigger>
       </TabsList>
 
       <div className="mt-3"><SelectionBar /></div>
@@ -100,6 +102,9 @@ function Workspace() {
       </TabsContent>
       <TabsContent value="docs" className="mt-4 animate-in fade-in duration-150">
         <ErrorBoundary label="DocumentationPanel"><Suspense fallback={<PanelFallback />}><DocumentationPanel repoId={repo.id} /></Suspense></ErrorBoundary>
+      </TabsContent>
+      <TabsContent value="timeline" className="mt-4 animate-in fade-in duration-150">
+        <ErrorBoundary label="Timeline"><Suspense fallback={<PanelFallback />}><TimelinePanel key={repo.id} repoId={repo.id} /></Suspense></ErrorBoundary>
       </TabsContent>
     </Tabs>
   );

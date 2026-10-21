@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import FolderGit2Icon from "../assets/icons/folder-git-2.svg?react";
 import LogOutIcon from "../assets/icons/log-out.svg?react";
+import DashboardIcon from "../assets/icons/layout-dashboard.svg?react";
 import BrainIcon from "../assets/icons/brain.svg?react";
 import logoLight from "../assets/logo/logo-light.svg";
 
@@ -48,6 +49,7 @@ export default function Sidebar() {
       <nav className="flex-1 py-4">
         <div className="hidden md:block px-4 mb-2 text-[10px] uppercase tracking-[0.18em] text-white/30 mono">Workspace</div>
         <div className="space-y-0.5">
+          <NavItem to="/dashboard" icon={DashboardIcon} label="Dashboard" testId="nav-dashboard" />
           <NavItem to="/repositories" icon={FolderGit2Icon} label="Repositories" testId="nav-repositories" />
           <NavItem to="/memory" icon={BrainIcon} label="Engineering Memory" testId="nav-memory" />
         </div>

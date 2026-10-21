@@ -1,7 +1,7 @@
 """PostgreSQL application records and durable jobs
 
 Revision ID: 62243260b0ef
-Revises: 
+Revises:
 """
 from alembic import op
 import sqlalchemy as sa

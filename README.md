@@ -107,3 +107,7 @@ npm audit
 ```
 
 The default suite uses isolated SQLite application records, a graph test double, the actual Qdrant local implementation, S3 API simulation, and deterministic AI/embedding substitutes. **No production fallback to these substitutes exists.** Opt-in tests against real PostgreSQL, Neo4j and Qdrant are documented in the verification report.
+
+## Existing Vercel and Render deployment
+
+See [deployment and cutover instructions](docs/DEPLOYMENT.md) for the confirmed project, API routing, Google configuration, data preservation, and automatic updates.

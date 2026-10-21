@@ -20,7 +20,7 @@ The app uses the JavaScript popup callback flow. It does not consume tokens from
 - Reload to confirm the session persists. Sign out, then sign in with Google again without reloading the page.
 - For an existing email/password account, check that the linking prompt rejects a wrong CodeOS password and succeeds with the correct password.
 - Verify the actual HTTPS origin, browser privacy settings and popup/FedCM behavior. Repeat in browsers your users rely on.
-- A missing client ID leaves email sign-in available. A blocked or failed Google script displays a refresh action. A ten-minute nonce expiry also requires refreshing Google sign-in. Opening another login tab can replace the challenge cookie; refresh the older tab before retrying.
+- A missing client ID keeps a disabled Google option visible with an explanation and leaves email sign-in available. A blocked or failed Google script displays a refresh action. A ten-minute nonce expiry also requires refreshing Google sign-in. Opening another login tab can replace the challenge cookie; refresh the older tab before retrying.
 
 Legacy Google-only records that lack a subject can migrate automatically only when Google is authoritative for the email (Gmail or a verified hosted domain claim). Legacy third-party email accounts require administrator-assisted identity recovery; do not attach a new identity solely because email text matches.
 

@@ -12,9 +12,17 @@ def flag(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).lower() in {"1", "true", "yes"}
 
 
+def async_database_url(url: str) -> str:
+    """Accept standard provider PostgreSQL URLs without rewriting credentials."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+asyncpg://" + url[len(prefix):]
+    return url
+
+
 class Settings:
     ENV = os.getenv("ENV", "development")
-    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://codeos:codeos@localhost:5432/codeos")
+    DATABASE_URL = async_database_url(os.getenv("DATABASE_URL", "postgresql+asyncpg://codeos:codeos@localhost:5432/codeos"))
     DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
     JWT_SECRET = os.getenv("JWT_SECRET", "")
     JWT_ALGORITHM = "HS256"
@@ -30,6 +38,7 @@ class Settings:
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
     EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "768"))
     AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "90"))
+    INTERACTIVE_TIMEOUT_SECONDS = float(os.getenv("INTERACTIVE_TIMEOUT_SECONDS", "105"))
     S3_BUCKET = os.getenv("S3_BUCKET", "codeos-archives")
     S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL") or None
     AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
@@ -77,5 +86,7 @@ def validate_startup_config() -> None:
         errors.append("EMBEDDING_DIMENSIONS must be between 128 and 3072.")
     if not settings.NEO4J_PASSWORD:
         errors.append("Set NEO4J_PASSWORD.")
+    if not 0 < settings.INTERACTIVE_TIMEOUT_SECONDS <= 110:
+        errors.append("INTERACTIVE_TIMEOUT_SECONDS must be greater than 0 and at most 110.")
     if errors:
         raise RuntimeError("Configuration errors:\n- " + "\n- ".join(errors))
