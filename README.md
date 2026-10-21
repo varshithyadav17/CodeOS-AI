@@ -112,4 +112,4 @@ The default suite uses isolated SQLite application records, a graph test double,
 
 See [deployment and cutover instructions](docs/DEPLOYMENT.md) for the confirmed project, API routing, Google configuration, data preservation, and automatic updates.
 
-The confirmed Render workspace has no CodeOS backend yet. [The prepared Render setup](docs/RENDER_SETUP.md) defines the new API and PostgreSQL database, required provider settings, and costs. Applying `render.yaml` creates paid resources; the file has not been applied.
+The portfolio deployment uses free Render plans, as requested. The free PostgreSQL database is created; the API and external provider settings still need connecting. [The Render setup guide](docs/RENDER_SETUP.md) records the resources, free-tier limits, and account settings. `render.yaml` uses startup migrations because free web services do not have pre-deploy jobs.

@@ -1,5 +1,5 @@
-# CodeOS only. Review the paid resources and provider settings before applying.
-# See docs/RENDER_SETUP.md. No resources have been created by committing this file.
+# CodeOS portfolio demo. The owner chose free plans and accepted DB expiry.
+# See docs/RENDER_SETUP.md for provider settings and current resource status.
 # The service follows the branch selected when this Blueprint is installed.
 previews:
   generation: 'off'
@@ -10,11 +10,13 @@ services:
     runtime: docker
     repo: https://github.com/varshithyadav17/CodeOS-AI
     region: singapore
-    plan: 0.5c-512mb
+    plan: free
     numInstances: 1
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    preDeployCommand: alembic upgrade head && python scripts/check_services.py
+    # Free services have no pre-deploy jobs or shell. Migrations are serialized
+    # with a PostgreSQL transaction lock and must succeed before HTTP starts.
+    dockerCommand: python start.py --migrate
     healthCheckPath: /api/health/live
     maxShutdownDelaySeconds: 120
     autoDeployTrigger: checksPass
@@ -46,6 +48,8 @@ services:
       - key: EMBEDDING_DIMENSIONS
         value: "768"
       - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT_URL
         sync: false
       - key: AWS_REGION
         sync: false
@@ -79,10 +83,6 @@ services:
 databases:
   - name: codeos-db
     region: singapore
-    plan: 0.1c-256mb
+    plan: free
     postgresMajorVersion: "16"
-    databaseName: codeos
-    user: codeos
-    diskSizeGB: 1
-    storageAutoscalingEnabled: false
     ipAllowList: []

@@ -7,7 +7,7 @@ The deployment branch restores Dashboard and Timeline, retains a visible Google 
 - Python import/name lint and dependency consistency: passed.
 - Vercel rejected dynamic configuration during its preview attempt. Static SPA configuration and an origin-validating API proxy setup script replace it. The preview at commit `f3ffe47` is READY, and that commit's GitHub CI also passed. The actual API destination is still missing because the confirmed Render workspace has no CodeOS backend.
 - GitHub CI browser suite: **31 checks passed, zero uncaught browser errors**, against the production build. Covers restored Dashboard/Timeline and visible unavailable Google state. AI, Google, and populated Timeline data use explicit substitutes. See [CI browser results](DEPLOYMENT-BROWSER-RESULTS.json). Local Chromium downloads were unavailable; CI completed these checks successfully.
-- Render inspection found only QuickChat and no PostgreSQL instances. The CodeOS-only Blueprint is prepared for a new backend/database; it has not been applied. See [Render setup and required settings](RENDER_SETUP.md).
+- Render initially had only QuickChat. After the owner selected free hosting, a free CodeOS PostgreSQL instance was created. The Blueprint now uses free web/database plans and serialized startup migrations. Live API/provider setup remains pending. See [Render setup and required settings](RENDER_SETUP.md).
 - Live Google consent, provider credentials, any existing MongoDB data transfer, CodeOS service configuration, and production rollout remain unverified. See [deployment instructions](DEPLOYMENT.md).
 
 The report below records earlier source verification and remains historical evidence only.

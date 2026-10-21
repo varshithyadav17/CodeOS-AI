@@ -5,9 +5,9 @@
 - GitHub: `varshithyadav17/CodeOS-AI`. Production branch: `main`.
 - Vercel project: `code_os-ai` (`prj_QgtWYgzbJniBczcuWSSHx8bkSLzm`). Public production origin: `https://codeos-ai-two.vercel.app`.
 - Production serves `20c0f5f98d8aaecb57bc1cee0c4a4d2c24e0402b`. Its Google button displays a placeholder message.
-- Render workspace `My Workspace` (`tea-d8rd7qojs32c73bu413g`) is confirmed by the owner. Inspection found only the unrelated QuickChat service and no PostgreSQL instances. There is no CodeOS backend in this workspace to update.
+- Render workspace `My Workspace` (`tea-d8rd7qojs32c73bu413g`) is confirmed. Initial inspection found only QuickChat. The owner then selected free hosting for a portfolio demo and accepted 30-day database expiry. Free PostgreSQL `codeos-db` (`dpg-dbck2rui0phs73f353jg-a`) is created in Singapore; the CodeOS API is still pending.
 - Vercel successfully built the deployment candidate preview at commit `f3ffe47`. The preview renders the frontend, but the API proxy still needs an actual CodeOS backend origin.
-- [The Render setup](RENDER_SETUP.md) and root `render.yaml` prepare a separate CodeOS API and PostgreSQL database. The paid resources have not been provisioned; external provider credentials and a hosting-cost decision remain necessary.
+- [The Render setup](RENDER_SETUP.md) and root `render.yaml` use free plans for the CodeOS API and database. The cost decision is settled. Database connection settings and external provider credentials are still required; no paid resources were created.
 
 This branch is a deployment candidate. It has not replaced production.
 
@@ -19,18 +19,17 @@ Reuse the existing GitHub repository, Vercel project, and confirmed Render works
 
 ## Backend settings
 
-The prepared Blueprint uses the existing Dockerfile, a private PostgreSQL connection, pre-deploy migrations, and automatic deployments after CI passes. If creating the service manually with the native Python runtime instead:
+The free Blueprint uses the Dockerfile, a private PostgreSQL connection, and `python start.py --migrate`. PostgreSQL transaction locks serialize migrations before HTTP starts. The Blueprint requests automatic deployments after CI passes. If creating a native Python service manually instead:
 
 | Setting | Value |
 | --- | --- |
 | Root directory | `backend` |
 | Python | 3.12 |
 | Build | `pip install -r requirements.txt` |
-| Pre-deploy migration | `alembic upgrade head` |
-| Start | `python start.py` |
+| Start (free service) | `python start.py --migrate` |
 | Health check | `/api/health/live` |
 
-For Docker, use `backend/Dockerfile` with build context `backend`. It also reads Render's `PORT`. If pre-deploy commands are unavailable on the existing plan, run migrations in an authorized one-off session before rollout. Startup deliberately does not run database migrations.
+For Docker, use `backend/Dockerfile` with build context `backend` and command `python start.py --migrate`. It reads Render's `PORT`. Free services have no pre-deploy jobs, one-off sessions, or interactive shell. The plain `python start.py` command still leaves migrations to the operator for other deployment environments.
 
 Configure:
 

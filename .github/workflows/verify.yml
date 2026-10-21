@@ -59,6 +59,40 @@ jobs:
           assert shutil.which('git');
           assert '/api/health/live' in app.openapi()['paths'];
           print('PASS non-root container, Git and API imports')"
+      - name: Verify free-host startup and concurrent migrations
+        run: |
+          set -euo pipefail
+          trap 'docker rm --force codeos-ci-a codeos-ci-b >/dev/null 2>&1 || true' EXIT
+          for spec in a:18000 b:18001; do
+            docker run --detach --name "codeos-ci-${spec%%:*}" --network host --memory 512m \
+              -e DATABASE_URL="$CODEOS_TEST_POSTGRES_URL" \
+              -e ENV=production -e AUTH_COOKIE_SECURE=true -e WORKER_ENABLED=false \
+              -e JWT_SECRET=isolated-ci-startup-secret-over-32-characters \
+              -e NEO4J_PASSWORD=isolated-ci-no-provider-access \
+              -e PORT="${spec#*:}" codeos-api:ci python start.py --migrate
+          done
+          python - <<'PY'
+          import time
+          import urllib.request
+          deadline = time.monotonic() + 75
+          pending = {18000, 18001}
+          while pending and time.monotonic() < deadline:
+              for port in list(pending):
+                  try:
+                      with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health/live', timeout=2) as response:
+                          if response.status == 200:
+                              pending.remove(port)
+                  except OSError:
+                      pass
+              if pending:
+                  time.sleep(1)
+          if pending:
+              import subprocess
+              for name in ('codeos-ci-a', 'codeos-ci-b'):
+                  subprocess.run(['docker', 'logs', name], check=False)
+              raise SystemExit(f'Container startup failed on ports: {sorted(pending)}')
+          print('PASS two 512 MB containers migrated PostgreSQL and started on PORT')
+          PY
       - run: npm run lint --prefix frontend
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/verify_browser.py
