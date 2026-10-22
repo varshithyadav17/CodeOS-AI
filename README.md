@@ -2,23 +2,24 @@
 
 Codebase intelligence with semantic code retrieval, a structural knowledge graph, and answers linked to source files and line ranges.
 
-This source checkpoint upgrades the supplied React application to **React + Vite + Tailwind, FastAPI, PostgreSQL, S3, Neo4j, Qdrant, and Gemini**. The frontend sends application operations to FastAPI; Google sign-in uses Google Identity Services. Repository source exists permanently as an original ZIP in object storage; clones and extracted workspaces are temporary.
+Upload a ZIP or import a GitHub repository, browse its files and relationships, ask questions with source citations, run six-specialist reviews, generate documentation, and retain findings as engineering memory.
 
-**Read [docs/VERIFICATION.md](docs/VERIFICATION.md) before deployment.** GitHub CI passed 76 backend tests (including PostgreSQL concurrency) and 31 production-build browser checks. Earlier real Neo4j/Qdrant adapter checks also passed. Browser AI and Google flows use explicit test substitutes. AWS permissions, real Gemini calls, Google consent, private GitHub imports, the complete Docker startup, and production load still need live verification. No API keys or existing application database were supplied with the source archive.
+Built with **React, Vite, Tailwind, FastAPI, PostgreSQL, S3-compatible storage, Neo4j, Qdrant, and Gemini**. Google sign-in uses Google Identity Services. Original repository archives remain in private object storage; clones and extracted workspaces are temporary.
+
+See [live verification](docs/LIVE_VERIFICATION.md) for actual cloud checks and the current Neo4j authentication blocker, and [automated verification](docs/VERIFICATION.md) for test coverage. The local suite passes 83 backend tests; CI additionally checks PostgreSQL concurrency, deployment containers and browser flows. Browser AI and Google checks use explicit substitutes. Personal Google consent, private GitHub token access and production load are separate verification boundaries.
 
 ## Start with Docker Desktop
 
 Prerequisites: Docker with Compose v2, Python 3.10+ for the small configuration helper, and a Gemini API key with access to the configured generation and embedding models. Allow roughly 4 GB of memory for the local stack.
 
-1. Extract the ZIP and open a terminal in the `CodeOS-AI` folder.
-2. Optionally verify the untouched extracted source, then generate separate random local credentials:
+1. Clone this repository and open a terminal in the `CodeOS-AI` folder.
+2. Generate separate random local credentials:
 
    ```bash
-   python scripts/verify_source.py
    python scripts/configure.py
    ```
 
-3. Edit the generated `.env` and fill in `GEMINI_API_KEY`. The defaults use `gemini-3.8-flash` for generation and `gemini-embedding-001` with 768-dimensional cosine vectors for retrieval. Both model names are configurable. Choose models available to your account.
+3. Edit the generated `.env` and fill in `GEMINI_API_KEY`. The defaults use `gemini-3.5-flash-lite` for generation and `gemini-embedding-001` with 768-dimensional cosine vectors for retrieval. Both model names are configurable. Choose models available to your account.
 4. Start the stack:
 
    ```bash
@@ -26,7 +27,7 @@ Prerequisites: Docker with Compose v2, Python 3.10+ for the small configuration 
    docker compose ps
    ```
 
-5. Open **http://localhost:8080**, create an account, and upload a small ZIP. Local development builds the official MinIO source release as an S3-compatible object store; its first build compiles Go dependencies. Production uses your AWS S3 bucket.
+5. Open **http://localhost:8080**, create an account, and upload a small ZIP. Local development builds the official MinIO source release as an S3-compatible object store; its first build compiles Go dependencies. The portfolio deployment uses private Backblaze S3-compatible storage.
 6. Verify the actual service configuration, including two small Gemini requests:
 
    ```bash
@@ -112,4 +113,4 @@ The default suite uses isolated SQLite application records, a graph test double,
 
 See [deployment and cutover instructions](docs/DEPLOYMENT.md) for the confirmed project, API routing, Google configuration, data preservation, and automatic updates.
 
-The portfolio deployment uses free Render plans, as requested. The free PostgreSQL database is created; `render.yaml` creates only the free API service and automatically references that existing database. The API and external provider settings still need connecting. [The Render setup guide](docs/RENDER_SETUP.md) includes a setup link for your own browser, the resources, free-tier limits, and account settings. Startup migrations run before HTTP because free web services do not have pre-deploy jobs.
+The portfolio deployment uses the existing Vercel project and free Render service at `https://codeos-api.onrender.com`. PostgreSQL, private archives, Qdrant and earlier Neo4j/Gemini operations passed real cloud checks. The latest restart exposed a Neo4j authentication failure, so the final frontend cutover is pending. [Live verification](docs/LIVE_VERIFICATION.md) records the tested flows and remaining limits. [The Render setup guide](docs/RENDER_SETUP.md) documents the existing resources and free-tier settings. The owner accepts PostgreSQL expiry on 21 November 2026 in India. Startup migrations run before HTTP because free web services do not have pre-deploy jobs.

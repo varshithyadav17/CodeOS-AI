@@ -4,18 +4,18 @@
 
 - GitHub: `varshithyadav17/CodeOS-AI`. Production branch: `main`.
 - Vercel project: `code_os-ai` (`prj_QgtWYgzbJniBczcuWSSHx8bkSLzm`). Public production origin: `https://codeos-ai-two.vercel.app`.
-- Production serves `20c0f5f98d8aaecb57bc1cee0c4a4d2c24e0402b`. Its Google button displays a placeholder message.
-- Render workspace `My Workspace` (`tea-d8rd7qojs32c73bu413g`) is confirmed. Initial inspection found only QuickChat. The owner then selected free hosting for a portfolio demo and accepted 30-day database expiry. Free PostgreSQL `codeos-db` (`dpg-dbck2rui0phs73f353jg-a`) is created in Singapore; the CodeOS API is still pending.
-- Vercel successfully built the deployment candidate preview at commit `f3ffe47`. The preview renders the frontend, but the API proxy still needs an actual CodeOS backend origin.
-- [The Render setup](RENDER_SETUP.md) and root `render.yaml` use free plans for the CodeOS API and database. The cost decision is settled. Database connection settings and external provider credentials are still required; no paid resources were created.
+- Render workspace: `My Workspace` (`tea-d8rd7qojs32c73bu413g`). The free API is `codeos-api` (`srv-dbd85cd9fdbs73apdqdg`), Singapore, at `https://codeos-api.onrender.com`. QuickChat is separate.
+- Free PostgreSQL: `codeos-db` (`dpg-dbck2rui0phs73f353jg-a`), Singapore, private connections only. The owner accepts its expiry at `2026-11-20T22:49:19Z` (21 November in India).
+- The candidate's checked-in Vercel configuration forwards `/api` to the actual CodeOS API. PostgreSQL, Backblaze storage and Qdrant pass readiness. Neo4j passed real graph operations earlier but now rejects authentication after the latest restart; final cutover waits for the current instance credentials. Real generation/embeddings passed with the previous model. The free demo now selects `gemini-3.5-flash-lite` after the old model exhausted its 20-request daily allowance; its generation flow must be rechecked after Neo4j recovery. Embeddings and the vector collection are unchanged.
+- [Live verification](LIVE_VERIFICATION.md) records the tested flows, CI evidence, quota handling, and checks that require a personal Google account. No paid compute, storage disk or separate worker was created.
 
 This branch is a deployment candidate. It has not replaced production.
 
 ## Preserve existing data
 
-The old GitHub backend uses MongoDB. This candidate implements the agreed PostgreSQL, S3, Neo4j, Qdrant, and Gemini architecture. Alembic upgrades PostgreSQL schemas; it does **not** import MongoDB users, repositories, conversations, or findings. Inspect the existing backend and take a recoverable export before changing its database. If user data exists, transfer and verify it before cutover. Preserve the original database and existing S3 objects.
+The old GitHub backend uses MongoDB. This deployment implements PostgreSQL, S3-compatible archives, Neo4j, Qdrant, and Gemini. Alembic upgrades PostgreSQL schemas; it does **not** import MongoDB users, repositories, conversations, or findings. The new demo database is separate; no historical MongoDB migration or deletion was performed. Preserve any older database and objects if they contain data to retain.
 
-Reuse the existing GitHub repository, Vercel project, and confirmed Render workspace. Keep QuickChat separate. PostgreSQL can use the existing Render account; S3, Neo4j, Qdrant, Gemini, and a Google Web OAuth client must be supplied or configured for CodeOS. No CodeOS provider credentials were present in the supplied source or Vercel configuration. Do not create paid resources or change plans without agreement. Keep private values in provider secret settings, never in source control or chat.
+Reuse the existing GitHub repository, Vercel project, and confirmed Render workspace. Provider settings are already stored on the CodeOS Render service. Keep QuickChat separate and private values in provider secret settings, never in source control or chat.
 
 ## Backend settings
 
@@ -43,14 +43,15 @@ Configure:
 - `GOOGLE_CLIENT_ID` for the intended Web OAuth client.
 - `WORKER_ENABLED=true` for background processing in a single web service. With a separate worker, disable it on web services and run `python worker.py` on the worker. Sleeping free services cannot provide continuous background processing.
 - `INTERACTIVE_TIMEOUT_SECONDS=105` keeps chat and documentation generation within Vercel's external rewrite time limit. Ingestion and reviews remain durable background jobs.
+- `LLM_REQUESTS_PER_MINUTE=5` paces generation and retries across chat, documentation and reviews in this single-process free deployment. Keep it within the actual provider allowance. Reviews can take several minutes; multiple processes would need a shared limiter.
 
 ## Frontend settings
 
 Use the existing Vercel project and Git connection. Root directory: `frontend`; framework: Vite; Node: 24; build: `npm run build`; output: `dist`.
 
-After creating the CodeOS backend and confirming its Render URL, run `python scripts/configure_vercel.py https://ACTUAL-RENDER-SERVICE.onrender.com` and commit the generated `frontend/vercel.json` before deployment. Use the actual service origin without `/api`; the example is not a deployable address. The script validates the origin and prepends the API proxy route. Remove `VITE_BACKEND_URL` on Vercel.
+`frontend/vercel.json` already forwards `/api/:path*` to `https://codeos-api.onrender.com/api/:path*`. If the backend origin changes, run `python scripts/configure_vercel.py https://NEW-CONFIRMED-ORIGIN` and commit the generated configuration. The script validates the origin and prepends the API proxy route. Leave `VITE_BACKEND_URL` unset on Vercel.
 
-The checked-in configuration supplies the real SPA routes and popup/cache headers, but deliberately has no invented API destination. Until configured, previews can render the frontend but cannot use the backend. Vercel rejected the earlier dynamic configuration, so routing now uses the supported static JSON format. Browser requests use the same-origin `/api` proxy once the actual destination is written, preserving session and Google challenge cookies.
+The checked-in configuration supplies SPA routes and popup/cache headers using static JSON. Browser requests use the same-origin `/api` proxy, preserving session and Google challenge cookies. Deployment Protection remains enabled on previews; the connected fetch operation could not access the protected candidate with its current project scope.
 
 ## Google sign-in
 

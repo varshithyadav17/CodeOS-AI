@@ -1,5 +1,7 @@
 # Product flow and feature audit
 
+Current cloud results are in [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md). This file records the original source checkpoint; later work restored Dashboard and a dedicated Timeline UI, added cloud deployment, and verified real provider calls.
+
 19 October 2026. This follow-up starts from the previously delivered `CodeOS-AI-Verified-Source.zip`, SHA-256 `1c584fc70dda180b69abd29fbfe645b2e166a9f0006597717300ffc7dcfd69ee`. It preserves the agreed architecture and existing product design.
 
 ## Flow checked against the agreed design

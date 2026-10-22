@@ -1,3 +1,11 @@
+# Current cloud verification
+
+See [LIVE_VERIFICATION.md](LIVE_VERIFICATION.md) for actual cloud checks, the current Neo4j authentication blocker, the free-quota and shallow-history fixes, and remaining Google consent verification. CI on `3674eea` passed **84 backend tests, three skips, the Docker/startup checks, and all 31 browser checks with zero uncaught browser errors**: [workflow evidence](https://github.com/varshithyadav17/CodeOS-AI/actions/runs/39870007877). The browser suite uses the GitHub Ubuntu runner's installed Chrome and records its version, avoiding another browser download. Browser AI and Google checks use explicit substitutes; the live report distinguishes these from actual Gemini/cloud calls.
+
+The reports below are historical checkpoints. Their pending setup items describe the state at each checkpoint, not the current deployment.
+
+---
+
 # Deployment candidate checks — 2026-10-22
 
 The deployment branch restores Dashboard and Timeline, retains a visible Google option when configuration is absent, adds Render port/PostgreSQL URL support, bounds interactive AI requests, and supplies Vercel API/SPA routing plus CI.
