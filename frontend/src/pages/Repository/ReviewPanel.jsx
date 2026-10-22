@@ -235,7 +235,7 @@ export default function ReviewPanel({ repoId, repoReady }) {
 
       {!current && (
         <EmptyState testId="review-empty" title="No reviews yet."
-          subtitle="Run a review to launch all six specialist agents (architecture, security, performance, testing, docs, refactoring) in parallel."
+          subtitle="Run all six specialists: architecture, security, performance, testing, docs and refactoring. A review can take several minutes on the free tier."
           action={repoReady ? { label: "Run review", onClick: handleStartReview } : undefined} />
       )}
 

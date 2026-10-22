@@ -3,7 +3,7 @@ name: Verify CodeOS
 on:
   pull_request:
   push:
-    branches: [main, codex/deployment-readiness]
+    branches: [main]
 
 permissions:
   contents: read

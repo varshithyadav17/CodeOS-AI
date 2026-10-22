@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from fastapi import HTTPException
 from google import genai
@@ -13,6 +14,38 @@ from ..utils import tokenize
 
 logger = logging.getLogger(__name__)
 _client_cache = {}
+_generation_pacers = {}
+
+
+class _RequestPacer:
+    """Share one request budget across generation calls and their retries."""
+    def __init__(self, requests_per_minute, *, clock=None, sleep=None):
+        self.interval = 60.0 / requests_per_minute + 0.25
+        self.clock = clock or time.monotonic
+        self.sleep = sleep or asyncio.sleep
+        self.next_request = 0.0
+        self.cooldown = 0.0
+        self.lock = asyncio.Lock()
+
+    async def wait(self):
+        async with self.lock:
+            while True:
+                delay = max(self.next_request, self.cooldown) - self.clock()
+                if delay <= 0:
+                    break
+                await self.sleep(delay)
+            self.next_request = self.clock() + self.interval
+
+    def defer(self, seconds):
+        # This synchronous update also reaches tasks already waiting in wait().
+        self.cooldown = max(self.cooldown, self.clock() + seconds)
+
+
+def _get_generation_pacer(api_key, model):
+    key = (api_key, model)
+    if key not in _generation_pacers:
+        _generation_pacers[key] = _RequestPacer(settings.LLM_REQUESTS_PER_MINUTE)
+    return _generation_pacers[key]
 
 
 def _provider_retry_delay(exc, attempt):
@@ -36,13 +69,14 @@ def _provider_retry_delay(exc, attempt):
             except ValueError:
                 pass
     # Interactive routes have an outer deadline; long/daily waits need a later request.
-    return delay if 0 <= delay <= 60 else None
+    return delay if 0 <= delay <= 120 else None
 
 
 def _get_client(api_key):
     if api_key not in _client_cache:
         _client_cache[api_key] = genai.Client(api_key=api_key,
-            http_options=types.HttpOptions(timeout=settings.AI_TIMEOUT_SECONDS * 1000))
+            http_options=types.HttpOptions(timeout=settings.AI_TIMEOUT_SECONDS * 1000,
+                retry_options=types.HttpRetryOptions(attempts=1)))
     return _client_cache[api_key]
 
 
@@ -50,6 +84,7 @@ async def close_clients():
     for client in _client_cache.values():
         await client.aio.aclose()
     _client_cache.clear()
+    _generation_pacers.clear()
 
 
 @dataclass
@@ -74,7 +109,9 @@ class LlmChat:
             raise RuntimeError("Set GEMINI_API_KEY to enable AI features.")
         text = message.text if isinstance(message, UserMessage) else str(message)
         client = _get_client(self.api_key)
-        for attempt in range(3):
+        pacer = _get_generation_pacer(self.api_key, self._model)
+        for attempt in range(5):
+            await pacer.wait()
             try:
                 async with asyncio.timeout(settings.AI_TIMEOUT_SECONDS):
                     response = await client.aio.models.generate_content(model=self._model, contents=text,
@@ -85,12 +122,14 @@ class LlmChat:
                     raise RuntimeError("Gemini returned no answer. Try a different question.")
                 return response.text
             except Exception as exc:
-                if attempt == 2 or getattr(exc, "code", None) not in {429, 500, 502, 503, 504}:
+                if attempt == 4 or getattr(exc, "code", None) not in {429, 500, 502, 503, 504}:
                     raise
                 delay = _provider_retry_delay(exc, attempt)
                 if delay is None:
                     raise
-                await asyncio.sleep(delay)
+                pacer.defer(delay)
+                logger.warning("gemini_retry model=%s status=%s attempt=%s delay=%.1f",
+                    self._model, exc.code, attempt + 1, delay)
 
 
 class RetrievalService:

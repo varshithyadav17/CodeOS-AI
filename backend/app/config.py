@@ -35,6 +35,7 @@ class Settings:
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.8-flash")
+    LLM_REQUESTS_PER_MINUTE = int(os.getenv("LLM_REQUESTS_PER_MINUTE", "5"))
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
     EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "768"))
     AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "90"))
@@ -88,5 +89,7 @@ def validate_startup_config() -> None:
         errors.append("Set NEO4J_PASSWORD.")
     if not 0 < settings.INTERACTIVE_TIMEOUT_SECONDS <= 110:
         errors.append("INTERACTIVE_TIMEOUT_SECONDS must be greater than 0 and at most 110.")
+    if not 1 <= settings.LLM_REQUESTS_PER_MINUTE <= 1000:
+        errors.append("LLM_REQUESTS_PER_MINUTE must be between 1 and 1000.")
     if errors:
         raise RuntimeError("Configuration errors:\n- " + "\n- ".join(errors))
