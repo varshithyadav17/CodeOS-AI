@@ -6,6 +6,8 @@ The free `codeos-db` PostgreSQL 16 instance has been created in Singapore: `dpg-
 
 The file passes validation against Render's published JSON schema. CI builds the Docker image, checks non-root execution and API imports, and starts two 512 MB containers against the isolated CI PostgreSQL database to verify concurrent migrations and actual HTTP startup. Inspect the latest workflow result before applying. This does not replace authenticated Render validation or live provider checks.
 
+The authenticated Render setup rejected `maxShutdownDelaySeconds` on the Free plan even though the public schema accepted it. That override has been removed; free services use Render's default shutdown window. Refresh an already-open setup form to load the corrected Blueprint.
+
 ## Free demo resources
 
 | Resource | Configuration | Compute price |

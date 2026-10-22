@@ -20,7 +20,7 @@ services:
     # with a PostgreSQL transaction lock and must succeed before HTTP starts.
     dockerCommand: python start.py --migrate
     healthCheckPath: /api/health/live
-    maxShutdownDelaySeconds: 120
+    # Free services use Render's default shutdown window; do not override it.
     autoDeployTrigger: checksPass
     envVars:
       - key: ENV
