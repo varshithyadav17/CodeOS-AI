@@ -47,10 +47,14 @@ export default [
       'react/prop-types': 'off',
       'react-refresh/only-export-components': [
         'warn',
-        { allowConstantExport: true },
+        { allowConstantExport: true, allowExportNames: ['useAuth', 'useAI', 'useWorkspace', 'buttonVariants', 'isQuotaError', 'QUOTA_MESSAGE'] },
       ],
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
+  },
+  {
+    files: ['src/main.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
   {
     files: ['vite.config.js', 'tailwind.config.js', 'postcss.config.js'],

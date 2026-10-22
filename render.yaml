@@ -1,0 +1,85 @@
+# CodeOS portfolio demo. The owner chose free plans and accepted DB expiry.
+# See docs/RENDER_SETUP.md for provider settings and current resource status.
+# The service follows the branch selected when this Blueprint is installed.
+# codeos-db already exists in My Workspace (Singapore). Reference it below;
+# do not declare a database resource here, because a new Blueprint can clone it.
+previews:
+  generation: 'off'
+
+services:
+  - type: web
+    name: codeos-api
+    runtime: docker
+    repo: https://github.com/varshithyadav17/CodeOS-AI
+    region: singapore
+    plan: free
+    numInstances: 1
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    # Free services have no pre-deploy jobs or shell. Migrations are serialized
+    # with a PostgreSQL transaction lock and must succeed before HTTP starts.
+    dockerCommand: python start.py --migrate
+    healthCheckPath: /api/health/live
+    # Free services use Render's default shutdown window; do not override it.
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: codeos-db
+          property: connectionString
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_COOKIE_SAMESITE
+        value: lax
+      - key: CORS_ORIGINS
+        value: https://codeos-ai-two.vercel.app
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: gemini-3.5-flash-lite
+      - key: LLM_REQUESTS_PER_MINUTE
+        value: "5"
+      - key: EMBEDDING_MODEL
+        value: gemini-embedding-001
+      - key: EMBEDDING_DIMENSIONS
+        value: "768"
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ENCRYPTION
+        value: AES256
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: NEO4J_DATABASE
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION
+        value: codeos_gemini_768_v1
+      - key: WORKER_ENABLED
+        value: "true"
+      - key: AI_TIMEOUT_SECONDS
+        value: "90"
+      - key: INTERACTIVE_TIMEOUT_SECONDS
+        value: "105"

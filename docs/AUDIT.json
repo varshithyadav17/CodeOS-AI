@@ -1,0 +1,40 @@
+{
+  "input_filename": "codeos-ai (7).zip",
+  "sha256": "5aeec3b736a17e9b0c527309887c4a94128e46e0d3813c2d0c996db536193202",
+  "entries": 142,
+  "uncompressed_bytes": 3879221,
+  "baseline": {
+    "frontend": "React 18, Vite 5, Tailwind 3",
+    "backend": "FastAPI, MongoDB, local source directories, sparse TF-IDF retrieval",
+    "tests_present": false,
+    "cloud_credentials_or_database_export_present": false
+  },
+  "preserved": [
+    "authentication UI",
+    "repository workspace",
+    "knowledge graph UI",
+    "architecture views",
+    "code review",
+    "engineering memory",
+    "documentation routes"
+  ],
+  "major_changes": [
+    "PostgreSQL and Alembic",
+    "S3 original archives and temporary workspaces",
+    "Neo4j structural graph",
+    "Qdrant dense embeddings",
+    "durable jobs and coordinated cleanup",
+    "hybrid evidence-backed chat",
+    "frontend dependency and lifecycle fixes"
+  ],
+  "follow_up_audit": {
+    "date": "2026-10-19",
+    "baseline_zip_sha256": "1c584fc70dda180b69abd29fbfe645b2e166a9f0006597717300ffc7dcfd69ee",
+    "backend_passed": 70,
+    "default_skipped": 4,
+    "browser_checks_passed": 27,
+    "real_store_tests_passed": 2,
+    "report": "PRODUCT_AUDIT.md",
+    "google_setup": "GOOGLE_SIGN_IN.md"
+  }
+}
