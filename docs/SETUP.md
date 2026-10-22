@@ -9,7 +9,8 @@ Use the root `.env` with Docker Compose. Use `backend/.env` for native backend d
 | `DATABASE_URL` | `postgresql+asyncpg://user:password@host:5432/database`; URL-encode reserved characters in manually supplied passwords |
 | `JWT_SECRET` | Stable random secret, minimum 32 characters; the helper generates 48 random bytes encoded safely |
 | `GEMINI_API_KEY` | Server-side Gemini API key; required for embeddings and AI features |
-| `LLM_MODEL` | Available Gemini generation model; default `gemini-3.8-flash` |
+| `LLM_MODEL` | Available Gemini generation model; default `gemini-3.5-flash-lite` for the free demo |
+| `LLM_REQUESTS_PER_MINUTE` | Shared per-process generation pacing; default 5, including retries; keep within the provider allowance |
 | `EMBEDDING_MODEL` | Default `gemini-embedding-001` |
 | `EMBEDDING_DIMENSIONS` | Default 768; must match the Qdrant named vector |
 | `QDRANT_COLLECTION` | Versioned collection name; use a new collection after a model/dimension change |

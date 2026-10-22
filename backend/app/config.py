@@ -34,7 +34,7 @@ class Settings:
     CORS_ORIGINS = [x.strip().rstrip("/") for x in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5000").split(",") if x.strip()]
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.8-flash")
+    LLM_MODEL = os.getenv("LLM_MODEL", "gemini-3.5-flash-lite")
     LLM_REQUESTS_PER_MINUTE = int(os.getenv("LLM_REQUESTS_PER_MINUTE", "5"))
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
     EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "768"))

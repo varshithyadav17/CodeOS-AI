@@ -87,6 +87,23 @@ async def test_six_concurrent_specialists_share_budget_including_overload_retrie
     assert all(sum(start <= other < start + 60 for other in starts) <= 5 for start in starts)
 
 
+async def test_flash_lite_uses_supported_generation_parameters(monkeypatch, paced_clock):
+    from app.ai import chat
+    calls = []
+
+    async def generate(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(text="Supported free model answer")
+
+    client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate)))
+    monkeypatch.setattr(chat, "_get_client", lambda key: client)
+    llm = LlmChat().with_model("gemini", "gemini-3.5-flash-lite")
+    assert await llm.send_message(UserMessage("Explain the code")) == "Supported free model answer"
+    assert calls[0]["model"] == "gemini-3.5-flash-lite"
+    assert calls[0]["config"].temperature is None
+    assert calls[0]["config"].thinking_config.thinking_level.upper() == "MEDIUM"
+
+
 async def test_quota_cooldown_reaches_a_request_already_waiting():
     from app.ai.chat import _RequestPacer
     current = [0.0]

@@ -116,8 +116,8 @@ class LlmChat:
                 async with asyncio.timeout(settings.AI_TIMEOUT_SECONDS):
                     response = await client.aio.models.generate_content(model=self._model, contents=text,
                         config=types.GenerateContentConfig(system_instruction=self.system_message,
-                            temperature=1.0 if self._model.startswith("gemini-3") else 0.2, max_output_tokens=8192,
-                            thinking_config=types.ThinkingConfig(thinking_level="low") if self._model.startswith("gemini-3") else None))
+                            temperature=None if self._model.startswith("gemini-3") else 0.2, max_output_tokens=8192,
+                            thinking_config=types.ThinkingConfig(thinking_level=("medium" if self._model == "gemini-3.5-flash-lite" else "low")) if self._model.startswith("gemini-3") else None))
                 if not response.text:
                     raise RuntimeError("Gemini returned no answer. Try a different question.")
                 return response.text
