@@ -98,3 +98,8 @@ jobs:
       - name: Verify runner Chrome
         run: google-chrome --version
       - run: python scripts/verify_browser.py
+      - name: Inspect real public Google sign-in button
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        timeout-minutes: 6
+        run: python scripts/verify_public_login.py

@@ -1,6 +1,6 @@
 # CodeOS portfolio demo. The owner chose free plans and accepted DB expiry.
 # See docs/RENDER_SETUP.md for provider settings and current resource status.
-# The service follows the branch selected when this Blueprint is installed.
+# Application releases follow main; keep the existing Blueprint installation.
 # codeos-db already exists in My Workspace (Singapore). Reference it below;
 # do not declare a database resource here, because a new Blueprint can clone it.
 previews:
@@ -11,6 +11,7 @@ services:
     name: codeos-api
     runtime: docker
     repo: https://github.com/varshithyadav17/CodeOS-AI
+    branch: main
     region: singapore
     plan: free
     numInstances: 1

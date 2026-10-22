@@ -6,10 +6,10 @@
 - Vercel project: `code_os-ai` (`prj_QgtWYgzbJniBczcuWSSHx8bkSLzm`). Public production origin: `https://codeos-ai-two.vercel.app`.
 - Render workspace: `My Workspace` (`tea-d8rd7qojs32c73bu413g`). The free API is `codeos-api` (`srv-dbd85cd9fdbs73apdqdg`), Singapore, at `https://codeos-api.onrender.com`. QuickChat is separate.
 - Free PostgreSQL: `codeos-db` (`dpg-dbck2rui0phs73f353jg-a`), Singapore, private connections only. The owner accepts its expiry at `2026-11-20T22:49:19Z` (21 November in India).
-- The candidate's checked-in Vercel configuration forwards `/api` to the actual CodeOS API. PostgreSQL, Backblaze storage and Qdrant pass readiness. Neo4j passed real graph operations earlier but now rejects authentication after the latest restart; final cutover waits for the current instance credentials. Real generation/embeddings passed with the previous model. The free demo now selects `gemini-3.5-flash-lite` after the old model exhausted its 20-request daily allowance; its generation flow must be rechecked after Neo4j recovery. Embeddings and the vector collection are unchanged.
+- The checked-in Vercel configuration forwards `/api` to the actual CodeOS API. PostgreSQL, Backblaze storage, Neo4j and Qdrant pass authenticated readiness. Actual `gemini-3.5-flash-lite` chat returned citations and relationships; README generation and all six review specialists plus the manager passed. Embeddings and the vector collection are unchanged.
 - [Live verification](LIVE_VERIFICATION.md) records the tested flows, CI evidence, quota handling, and checks that require a personal Google account. No paid compute, storage disk or separate worker was created.
 
-This branch is a deployment candidate. It has not replaced production.
+The tested release merged through PR #1. Both application deployments are configured to follow `main`; final production verification is recorded in the live report.
 
 ## Preserve existing data
 
@@ -63,7 +63,7 @@ The real button is rendered by Google once configured. Missing configuration lea
 
 The `Verify CodeOS` workflow runs backend tests, PostgreSQL concurrency checks against an isolated CI schema, frontend lint, and the browser suite against a production build. No production secrets are needed. Populated Timeline browser views and AI/Google behavior use explicit test substitutes.
 
-After data/configuration checks and a successful preview, merge into `main`. Vercel's existing Git integration can automatically deploy that branch. Move the CodeOS Blueprint and its service to `main` as described in the setup guide. The Blueprint sets `autoDeployTrigger: checksPass`; verify Render is connected through its GitHub integration because deployments from a public repository URL alone do not provide automatic updates. Adding a workflow alone does not enable automatic deployments.
+Publish application changes through `main`. Vercel follows that branch and `render.yaml` explicitly sets the existing CodeOS service to `branch: main` with `autoDeployTrigger: checksPass`. Main pushes run the complete verification workflow. The existing Blueprint may still monitor the original candidate branch for infrastructure; an infrastructure edit must reach that branch (fast-forward it from tested main) until the Blueprint source is moved in the Dashboard. Ordinary application updates use main. Configuration syncs can deploy before CI finishes, so inspect checks before applying infrastructure changes. Never create a second Blueprint or service.
 
 Before assigning production traffic, verify API forwarding, cookies, SPA navigation, and Google on the candidate domain. Add that exact domain to CORS and Google origins if testing sign-in there. Confirm the deployed commit on both platforms.
 
