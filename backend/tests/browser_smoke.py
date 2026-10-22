@@ -35,7 +35,8 @@ async def main():
     errors=[]
     checks=[]
     async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=["--no-sandbox"])
+        browser=await p.chromium.launch(channel=os.getenv("CODEOS_BROWSER_CHANNEL"),headless=True,args=["--no-sandbox"])
+        browser_version=browser.version
         page=await browser.new_page(viewport={"width":1440,"height":1000})
         page.on("pageerror",lambda error:errors.append(str(error)))
         await page.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
@@ -286,7 +287,7 @@ async def main():
         checks.append("Missing Google configuration keeps the Google option visible and email login enabled")
         assert not errors,errors
         await browser.close()
-    report={"status":"passed","checks":checks,"uncaught_browser_errors":errors,"providers":"SQLite, in-memory graph, real Qdrant local, deterministic embeddings and AI stub; GIS JavaScript and Google verifier stubs; populated Timeline views use explicit HTTP fixtures"}
+    report={"status":"passed","checks":checks,"uncaught_browser_errors":errors,"browser_channel":os.getenv("CODEOS_BROWSER_CHANNEL") or "chromium","browser_version":browser_version,"providers":"SQLite, in-memory graph, real Qdrant local, deterministic embeddings and AI stub; GIS JavaScript and Google verifier stubs; populated Timeline views use explicit HTTP fixtures"}
     if os.getenv("CODEOS_BROWSER_REPORT"):
         Path(os.environ["CODEOS_BROWSER_REPORT"]).write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report,indent=2))
