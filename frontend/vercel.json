@@ -5,6 +5,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://codeos-api.onrender.com/api/:path*"
+    },
+    {
       "source": "/login",
       "destination": "/index.html"
     },
