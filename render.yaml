@@ -1,6 +1,8 @@
 # CodeOS portfolio demo. The owner chose free plans and accepted DB expiry.
 # See docs/RENDER_SETUP.md for provider settings and current resource status.
 # The service follows the branch selected when this Blueprint is installed.
+# codeos-db already exists in My Workspace (Singapore). Reference it below;
+# do not declare a database resource here, because a new Blueprint can clone it.
 previews:
   generation: 'off'
 
@@ -79,10 +81,3 @@ services:
         value: "90"
       - key: INTERACTIVE_TIMEOUT_SECONDS
         value: "105"
-
-databases:
-  - name: codeos-db
-    region: singapore
-    plan: free
-    postgresMajorVersion: "16"
-    ipAllowList: []

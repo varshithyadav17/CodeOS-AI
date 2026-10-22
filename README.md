@@ -112,4 +112,4 @@ The default suite uses isolated SQLite application records, a graph test double,
 
 See [deployment and cutover instructions](docs/DEPLOYMENT.md) for the confirmed project, API routing, Google configuration, data preservation, and automatic updates.
 
-The portfolio deployment uses free Render plans, as requested. The free PostgreSQL database is created; the API and external provider settings still need connecting. [The Render setup guide](docs/RENDER_SETUP.md) records the resources, free-tier limits, and account settings. `render.yaml` uses startup migrations because free web services do not have pre-deploy jobs.
+The portfolio deployment uses free Render plans, as requested. The free PostgreSQL database is created; `render.yaml` creates only the free API service and automatically references that existing database. The API and external provider settings still need connecting. [The Render setup guide](docs/RENDER_SETUP.md) includes a setup link for your own browser, the resources, free-tier limits, and account settings. Startup migrations run before HTTP because free web services do not have pre-deploy jobs.
