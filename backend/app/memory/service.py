@@ -137,6 +137,20 @@ class TimelineService:
         except Exception:
             return False
 
+    @staticmethod
+    def _stats(commit):
+        # A shallow boundary can contain the commit but omit its parent object.
+        # Keep its identity/history even when GitPython cannot calculate a diff.
+        try:
+            return commit.stats
+        except Exception:
+            return None
+
+    @staticmethod
+    def _message(commit):
+        lines = (commit.message or "").strip().splitlines()
+        return lines[0][:200] if lines else "(no commit message)"
+
     def commits(self, limit: int = 200) -> list[dict]:
         try:
             repo = self._git()
@@ -146,12 +160,14 @@ class TimelineService:
         out = []
         for c in repo.iter_commits(max_count=limit):
             try:
-                stats = c.stats.total
+                available_stats = self._stats(c)
+                stats = available_stats.total if available_stats is not None else {}
                 out.append({
                     "sha": c.hexsha[:12], "full_sha": c.hexsha,
                     "author": c.author.name, "email": c.author.email,
                     "date": c.committed_datetime.isoformat(),
-                    "message": (c.message or "").strip().splitlines()[0][:200],
+                    "message": self._message(c),
+                    "stats_available": available_stats is not None,
                     "insertions": stats.get("insertions", 0),
                     "deletions": stats.get("deletions", 0),
                     "files": stats.get("files", 0),
@@ -167,14 +183,13 @@ class TimelineService:
             return []
         out = []
         for c in repo.iter_commits(paths=file_path, max_count=limit):
-            try:
-                file_stats = c.stats.files.get(file_path, {})
-            except Exception:
-                file_stats = {}
+            stats = self._stats(c)
+            file_stats = stats.files.get(file_path, {}) if stats is not None else {}
             out.append({
                 "sha": c.hexsha[:12], "author": c.author.name,
                 "date": c.committed_datetime.isoformat(),
-                "message": (c.message or "").strip().splitlines()[0][:200],
+                "message": self._message(c),
+                "stats_available": stats is not None,
                 "insertions": file_stats.get("insertions", 0),
                 "deletions": file_stats.get("deletions", 0),
             })
@@ -190,7 +205,10 @@ class TimelineService:
         )
         for c in repo.iter_commits(max_count=500):
             try:
-                for path, st in c.stats.files.items():
+                stats = self._stats(c)
+                if stats is None:
+                    continue
+                for path, st in stats.files.items():
                     churn[path]["changes"] += 1
                     churn[path]["insertions"] += st.get("insertions", 0)
                     churn[path]["deletions"] += st.get("deletions", 0)
@@ -214,7 +232,7 @@ class TimelineService:
         except Exception:
             return []
         stats: dict[str, dict] = defaultdict(
-            lambda: {"commits": 0, "insertions": 0, "deletions": 0, "email": "", "last": ""}
+            lambda: {"commits": 0, "insertions": 0, "deletions": 0, "email": "", "last": "", "stats_available": True}
         )
         for c in repo.iter_commits(max_count=1000):
             try:
@@ -222,11 +240,15 @@ class TimelineService:
                 s = stats[a]
                 s["commits"] += 1
                 s["email"] = c.author.email
-                s["insertions"] += c.stats.total.get("insertions", 0)
-                s["deletions"] += c.stats.total.get("deletions", 0)
                 d = c.committed_datetime.isoformat()
                 if d > s["last"]:
                     s["last"] = d
+                commit_stats = self._stats(c)
+                if commit_stats is None:
+                    s["stats_available"] = False
+                else:
+                    s["insertions"] += commit_stats.total.get("insertions", 0)
+                    s["deletions"] += commit_stats.total.get("deletions", 0)
             except Exception:
                 continue
         out = [{"author": k, **v} for k, v in stats.items()]
@@ -255,7 +277,10 @@ class TimelineService:
             ins = dels = valid = 0
             for c in slab:
                 try:
-                    t = c.stats.total
+                    stats = self._stats(c)
+                    if stats is None:
+                        continue
+                    t = stats.total
                     ins += t.get("insertions", 0)
                     dels += t.get("deletions", 0)
                     valid += 1
@@ -267,6 +292,7 @@ class TimelineService:
                     "to": slab[-1].committed_datetime.isoformat(),
                     "commits": len(slab), "churn": ins + dels,
                     "insertions": ins, "deletions": dels,
+                    "stats_available": valid == len(slab),
                 })
             except Exception:
                 continue
@@ -277,7 +303,14 @@ class TimelineService:
         """Preserve bounded history metadata before removing the temporary clone."""
         commits = self.commits(200)
         hotspots = self.hotspots(100)
-        return {"available": self.available(), "shallow": True, "commits": commits,
+        paths = [f["path"] for f in hotspots[:50]]
+        shallow = False
+        if self.available():
+            repo = self._git()
+            shallow = repo.git.rev_parse("--is-shallow-repository").strip() == "true"
+            if not paths:
+                paths = [p for p in repo.git.ls_files(z=True).split("\0") if p][:50]
+        return {"available": self.available(), "shallow": shallow, "commits": commits,
             "hotspots": hotspots, "contributors": self.contributors(),
             "complexity": self.complexity_trend(20),
-            "files": {f["path"]: self.file_evolution(f["path"], 100) for f in hotspots[:50]}}
+            "files": {path: self.file_evolution(path, 100) for path in paths}}

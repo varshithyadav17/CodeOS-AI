@@ -15,6 +15,30 @@ logger = logging.getLogger(__name__)
 _client_cache = {}
 
 
+def _provider_retry_delay(exc, attempt):
+    """Respect Gemini's quota reset rather than exhausting retries too early."""
+    payload = getattr(exc, "details", {})
+    error = payload.get("error", payload) if isinstance(payload, dict) else {}
+    details = error.get("details", []) if isinstance(error, dict) else []
+    delay = 60.0 if getattr(exc, "code", None) == 429 else float(2**attempt)
+    for detail in details if isinstance(details, list) else []:
+        if not isinstance(detail, dict):
+            continue
+        if str(detail.get("@type", "")).endswith("QuotaFailure"):
+            if any("PerDay" in str(v.get("quotaId", ""))
+                   for v in detail.get("violations", []) if isinstance(v, dict)):
+                return None
+        if str(detail.get("@type", "")).endswith("RetryInfo"):
+            value = detail.get("retryDelay")
+            try:
+                if isinstance(value, str) and value.endswith("s"):
+                    delay = float(value[:-1]) + 1.0
+            except ValueError:
+                pass
+    # Interactive routes have an outer deadline; long/daily waits need a later request.
+    return delay if 0 <= delay <= 60 else None
+
+
 def _get_client(api_key):
     if api_key not in _client_cache:
         _client_cache[api_key] = genai.Client(api_key=api_key,
@@ -63,7 +87,10 @@ class LlmChat:
             except Exception as exc:
                 if attempt == 2 or getattr(exc, "code", None) not in {429, 500, 502, 503, 504}:
                     raise
-                await asyncio.sleep(2**attempt)
+                delay = _provider_retry_delay(exc, attempt)
+                if delay is None:
+                    raise
+                await asyncio.sleep(delay)
 
 
 class RetrievalService:

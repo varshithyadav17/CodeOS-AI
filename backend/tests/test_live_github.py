@@ -22,6 +22,8 @@ async def test_public_github_snapshot_reingest_and_delete(logged_in, monkeypatch
     assert len(repo.source_commit) == 40 and repo.archive_sha256
     assert repo.stats.files >= 3 and repo.stats.chunks > 0
     assert repo.timeline["available"] and repo.timeline["shallow"]
+    assert repo.timeline["commits"][0]["full_sha"] == repo.source_commit
+    assert repo.timeline["files"]["README.md"]
     assert len(storage.objects) == 1
     preview = await client.get(f"/api/repos/{rid}/files/content", params={"path": "README.md"})
     assert preview.status_code == 200 and "Spoon-Knife" in preview.json()["content"]

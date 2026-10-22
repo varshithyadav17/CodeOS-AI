@@ -75,11 +75,13 @@ async def main():
         await expect(page.get_by_test_id("timeline-unavailable")).to_be_visible()
         checks.append("ZIP repository timeline explains that Git history is unavailable")
         history = [{"sha": "abc123456789", "message": "Improve authentication", "author": "Test Author", "date": "2026-10-21T10:00:00Z", "insertions": 4, "deletions": 1}]
+        history.append({"sha": "boundary1234", "message": "Shallow boundary", "author": "Test Author", "date": "2026-10-20T10:00:00Z", "stats_available": False})
         timeline = {
             "commits": {"available": True, "shallow": True, "commits": history},
             "hotspots": {"items": [{"path": "auth.py", "changes": 2, "authors": 1, "insertions": 4, "deletions": 1}]},
-            "contributors": {"items": [{"author": "Test Author", "email": "author@example.test", "commits": 2}]},
-            "complexity": {"trend": [{"from": "2026-10-20", "to": "2026-10-21", "commits": 2, "churn": 5}]},
+            "contributors": {"items": [{"author": "Test Author", "email": "author@example.test", "commits": 2, "stats_available": False}]},
+            "complexity": {"trend": [{"from": "2026-10-20", "to": "2026-10-21", "commits": 2, "churn": 5},
+                {"from": "2026-10-19", "to": "2026-10-20", "commits": 1, "stats_available": False}]},
             "file": {"history": history},
         }
         async def timeline_response(route):
@@ -95,12 +97,15 @@ async def main():
         await page.get_by_test_id("timeline-error").get_by_role("button", name="Retry").click()
         await expect(page.get_by_test_id("timeline-scope")).to_contain_text("shallow clone")
         await expect(page.get_by_test_id("timeline-commits")).to_contain_text("Improve authentication")
+        await expect(page.get_by_test_id("timeline-commits")).to_contain_text("Change counts unavailable")
         await page.get_by_role("searchbox", name="Search timeline").fill("absent")
         await expect(page.get_by_text("No matching history", exact=True)).to_be_visible()
         await page.get_by_test_id("timeline-view-contributors").click()
         await expect(page.get_by_text("author@example.test", exact=True)).to_be_visible()
+        await expect(page.get_by_test_id("timeline-root")).to_contain_text("2 commits · Change counts unavailable")
         await page.get_by_test_id("timeline-view-complexity").click()
         await expect(page.get_by_test_id("timeline-churn")).to_contain_text("5 lines")
+        await expect(page.get_by_test_id("timeline-churn")).to_contain_text("Churn unavailable")
         await page.get_by_test_id("timeline-view-hotspots").click()
         await page.get_by_role("button", name="auth.py", exact=True).click()
         await expect(page.get_by_label("File", exact=True)).to_have_value("auth.py")

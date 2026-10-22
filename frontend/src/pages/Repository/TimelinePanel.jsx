@@ -15,8 +15,10 @@ function CommitList({ items }) {
       <p className="text-sm text-white/85 break-words">{commit.message || "Commit"}</p>
       <div className="flex flex-wrap gap-3 text-xs text-white/45">
         <code>{commit.sha}</code><span>{commit.author}</span><time>{date(commit.date)}</time>
-        <span className="text-emerald-300">+{commit.insertions || 0}</span>
-        <span className="text-red-300">−{commit.deletions || 0}</span>
+        {commit.stats_available === false ? <span>Change counts unavailable</span> : <>
+          <span className="text-emerald-300">+{commit.insertions || 0}</span>
+          <span className="text-red-300">−{commit.deletions || 0}</span>
+        </>}
       </div>
     </li>)}
   </ul>;
@@ -82,13 +84,13 @@ export default function TimelinePanel({ repoId }) {
         </>}
         {view === "contributors" && <ul className="divide-y divide-white/10">{visible.map((item, index) => <li key={`${item.author}-${index}`} className="py-3 flex flex-wrap justify-between gap-2">
           <div><p className="text-sm">{item.author || "Unknown author"}</p><p className="text-xs text-white/40 break-all">{item.email}</p></div>
-          <p className="text-xs text-white/50">{item.commits || 0} commits · +{item.insertions || 0} / −{item.deletions || 0}</p>
+          <p className="text-xs text-white/50">{item.commits || 0} commits · {item.stats_available === false ? "Change counts unavailable" : `+${item.insertions || 0} / −${item.deletions || 0}`}</p>
         </li>)}</ul>}
         {view === "complexity" && <div className="space-y-3" data-testid="timeline-churn">
           <p className="text-xs text-white/50">Code churn counts lines added and removed. It does not measure code complexity.</p>
           {items.map((item, index) => <div key={index} className="space-y-1">
-            <div className="flex flex-wrap justify-between gap-2 text-xs text-white/65"><span>{date(item.from)} — {date(item.to)}</span><span>{item.churn || 0} lines · {item.commits || 0} commits</span></div>
-            <div className="h-2 rounded bg-white/5" aria-hidden="true"><div className="h-2 rounded bg-[#3FC8E8]/60" style={{ width: `${100 * (item.churn || 0) / Math.max(1, ...items.map((entry) => entry.churn || 0))}%` }} /></div>
+            <div className="flex flex-wrap justify-between gap-2 text-xs text-white/65"><span>{date(item.from)} — {date(item.to)}</span><span>{item.stats_available === false ? "Churn unavailable" : `${item.churn || 0} lines`} · {item.commits || 0} commits</span></div>
+            {item.stats_available !== false && <div className="h-2 rounded bg-white/5" aria-hidden="true"><div className="h-2 rounded bg-[#3FC8E8]/60" style={{ width: `${100 * (item.churn || 0) / Math.max(1, ...items.map((entry) => entry.churn || 0))}%` }} /></div>}
           </div>)}
         </div>}
       </>}
