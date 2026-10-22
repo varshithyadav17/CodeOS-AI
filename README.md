@@ -1,5 +1,7 @@
 # CodeOS AI
 
+[Open the live app](https://codeos-ai-two.vercel.app)
+
 Codebase intelligence with semantic code retrieval, a structural knowledge graph, and answers linked to source files and line ranges.
 
 Upload a ZIP or import a GitHub repository, browse its files and relationships, ask questions with source citations, run six-specialist reviews, generate documentation, and retain findings as engineering memory.
@@ -113,4 +115,4 @@ The default suite uses isolated SQLite application records, a graph test double,
 
 See [deployment and cutover instructions](docs/DEPLOYMENT.md) for the confirmed project, API routing, Google configuration, data preservation, and automatic updates.
 
-The portfolio deployment uses the existing Vercel project and free Render service at `https://codeos-api.onrender.com`. PostgreSQL, private archives, Neo4j and Qdrant pass authenticated readiness. Real free-model chat, documentation and all six review specialists plus manager passed. The tested release has merged into `main`; final production routing checks are being completed. [Live verification](docs/LIVE_VERIFICATION.md) records the tested flows and remaining limits. [The Render setup guide](docs/RENDER_SETUP.md) documents the existing resources and free-tier settings. The owner accepts PostgreSQL expiry on 21 November 2026 in India. Startup migrations run before HTTP because free web services do not have pre-deploy jobs.
+The portfolio deployment uses the existing Vercel project and free Render service at `https://codeos-api.onrender.com`. PostgreSQL, private archives, Neo4j and Qdrant pass authenticated readiness. Real free-model chat, documentation and all six review specialists plus manager passed. The production app follows `main`; same-origin API forwarding, secure cookie sessions, provider readiness and SPA routes pass live checks. The real Google button also loads successfully on the public origin. [Live verification](docs/LIVE_VERIFICATION.md) records the tested flows and remaining limits. [The Render setup guide](docs/RENDER_SETUP.md) documents the existing resources and free-tier settings. The owner accepts PostgreSQL expiry on 21 November 2026 in India. Startup migrations run before HTTP because free web services do not have pre-deploy jobs.

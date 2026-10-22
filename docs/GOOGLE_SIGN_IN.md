@@ -4,6 +4,10 @@ CodeOS uses Google's visible, officially rendered sign-in button. The browser ob
 
 Accounts are identified by Google's permanent `sub`, not by mutable email addresses. Connecting Google to an existing password account requires that account's CodeOS password. An incorrect password leaves the accounts unlinked and allows another attempt.
 
+## Current portfolio deployment
+
+The official button is enabled at https://codeos-ai-two.vercel.app/login. On 23 October 2026 (India), a real Chrome check loaded Google's actual button iframe with HTTP 200 and no origin errors; no Google response was substituted. The backend challenge and client ID shape also passed. [CI evidence](https://github.com/varshithyadav17/CodeOS-AI/actions/runs/39873930978). Personal Google account selection/consent remains a separate user check.
+
 ## Configure your Google Cloud project
 
 1. Configure Google Auth Platform branding, audience and a **Web application** OAuth client. If the application is in testing, add the intended test users where Google requires them.
@@ -26,6 +30,6 @@ Legacy Google-only records that lack a subject can migrate automatically only wh
 
 ## What was tested here
 
-Thirteen backend tests run Google's actual token-verification SDK against locally signed RSA credentials and local public certificates. They exercise invalid signatures/claims, expiry, nonce mismatch, missing challenge, account linking, changed email, conflicting identities and provider failures. Browser checks use an explicit GIS/verification substitute to exercise application behavior without a real Google account. Neither test mode verifies your Google Cloud settings or actual consent screen. Complete the live checks above with your client ID and domain.
+Thirteen backend tests run Google's actual token-verification SDK against locally signed RSA credentials and local public certificates. They exercise invalid signatures/claims, expiry, nonce mismatch, missing challenge, account linking, changed email, conflicting identities and provider failures. Browser checks use an explicit GIS/verification substitute to exercise application behavior without a real Google account. Those isolated test modes do not verify the consent screen. The additional anonymous production check described above verifies real button loading and detects reported origin errors, but does not sign into an account. Complete the live checks above with your client ID and domain.
 
 References: [Google setup guide](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid), [server-side ID-token verification](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token), [JavaScript API](https://developers.google.com/identity/gsi/web/reference/js-reference).

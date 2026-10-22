@@ -9,7 +9,7 @@
 - The checked-in Vercel configuration forwards `/api` to the actual CodeOS API. PostgreSQL, Backblaze storage, Neo4j and Qdrant pass authenticated readiness. Actual `gemini-3.5-flash-lite` chat returned citations and relationships; README generation and all six review specialists plus the manager passed. Embeddings and the vector collection are unchanged.
 - [Live verification](LIVE_VERIFICATION.md) records the tested flows, CI evidence, quota handling, and checks that require a personal Google account. No paid compute, storage disk or separate worker was created.
 
-The tested release merged through PR #1. Both application deployments are configured to follow `main`; final production verification is recorded in the live report.
+The tested release merged through PR #1. Both application deployments are configured to follow `main`; production API forwarding, cookies, readiness and SPA routes have passed, as has the real Google button diagnostic. Exact deployment and verification evidence is recorded in the live report.
 
 ## Preserve existing data
 
