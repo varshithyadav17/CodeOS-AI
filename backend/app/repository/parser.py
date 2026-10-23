@@ -83,21 +83,31 @@ def _python(text: str, path: str):
 
 def _tree_extract(src: bytes, root, path: str):
     imports, symbols = [], []
-    function_types = {"function_declaration", "function_definition", "method_definition", "method_declaration", "arrow_function", "function", "function_expression", "function_item"}
-    class_types = {"class_declaration", "class_definition", "class_specifier", "struct_item"}
+    function_types = {"function_declaration", "function_definition", "method_definition", "method_declaration", "arrow_function", "function", "function_expression", "function_item", "method", "singleton_method"}
+    class_types = {"class_declaration", "class_definition", "class_specifier", "struct_item", "class"}
     def txt(node):
         return src[node.start_byte:node.end_byte].decode("utf-8", errors="replace") if node else ""
-    def walk(node, parent=None):
+    def walk(node, parent=None, parent_kind=None):
         for child in node.children:
             if child.type in {"import_statement", "import_from_statement", "use_declaration", "import_declaration"}:
                 imports.append(txt(child))
             if child.type in function_types | class_types:
                 name = txt(child.child_by_field_name("name"))
+                if not name and child.type == "function_definition":
+                    # C/C++ put names inside function/pointer declarators, not
+                    # directly on the function node. Keep scoped names intact.
+                    declarator = child.child_by_field_name("declarator")
+                    while declarator is not None:
+                        nested = declarator.child_by_field_name("declarator")
+                        if nested is None:
+                            name = txt(declarator)
+                            break
+                        declarator = nested
                 if not name and child.parent and child.parent.type in {"variable_declarator", "pair", "assignment_expression"}:
                     name = txt(child.parent.child_by_field_name("name") or child.parent.child_by_field_name("key") or child.parent.child_by_field_name("left"))
                 name = name or f"anonymous@{child.start_point[0]+1}:{child.start_point[1]}"
                 qname = f"{parent}.{name}" if parent else f"{path}::{name}"
-                kind = "class" if child.type in class_types else "method" if "method" in child.type else "function"
+                kind = "class" if child.type in class_types else "method" if "method" in child.type or parent_kind == "class" else "function"
                 calls = []
                 def find_calls(n):
                     if n is not child and n.type in function_types | class_types:
@@ -115,9 +125,9 @@ def _tree_extract(src: bytes, root, path: str):
                     if c.type in {"class_heritage", "superclass", "base_class_clause"}:
                         bases.extend(txt(c).replace("extends", "").strip().split(","))
                 symbols.append(ParsedSymbol(kind, name, qname, child.start_point[0]+1, child.end_point[0]+1, txt(child), parent, bases, list(dict.fromkeys(calls))[:200]))
-                walk(child, qname)
+                walk(child, qname, kind)
             else:
-                walk(child, parent)
+                walk(child, parent, parent_kind)
     walk(root)
     return imports, symbols
 

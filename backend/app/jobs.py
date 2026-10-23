@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, insert, or_, select, text, update
 from . import database as db
 from .config import settings
+from .embedding_limits import EmbeddingDeferred
 
 logger = logging.getLogger(__name__)
 _sqlite_lock = asyncio.Lock()
@@ -46,7 +47,7 @@ class JobCancelled(Exception):
     pass
 
 
-async def enqueue(repo_id, user_id, kind="ingest", details=None):
+async def enqueue(repo_id, user_id, kind="ingest", details=None, *, expected_failed_job_id=None):
     async with db.get_engine().begin() as conn:
         repo = (await conn.execute(select(db.repositories).where(db.repositories.c.id == repo_id, db.repositories.c.user_id == user_id).with_for_update())).mappings().first()
         if not repo:
@@ -54,6 +55,9 @@ async def enqueue(repo_id, user_id, kind="ingest", details=None):
         active = None
         if repo["active_job_id"]:
             active = (await conn.execute(select(db.jobs).where(db.jobs.c.id == repo["active_job_id"]))).mappings().first()
+        if expected_failed_job_id and (repo["status"] != "failed" or not active
+                or active["id"] != expected_failed_job_id or active["status"] != "failed"):
+            raise HTTPException(409, "Repository changed while recovery was being prepared.")
         pending = active and active["status"] in {"queued", "running", "retry"}
         if kind == "delete":
             if pending and active["kind"] == "delete":
@@ -140,6 +144,21 @@ async def _execute(job):
 
 
 async def _record_failure(job, exc):
+    if isinstance(exc, EmbeddingDeferred) and job["kind"] == "ingest" and job["details"].get("index_checkpoint", {}).get("graph_ready"):
+        deferrals = job["details"].get("quota_deferrals", 0) + 1
+        delay = exc.retry_after
+        if exc.reason == "quota":
+            delay = max(delay, min(900, 65 * 2**min(deferrals - 1, 4)))
+        await save_details(job, quota_deferrals=deferrals, pause_reason=exc.reason)
+        async with db.get_engine().begin() as conn:
+            await conn.execute(update(db.jobs).where(db.jobs.c.id == job["id"], db.jobs.c.lease_token == job["lease_token"]).values(
+                status="retry", attempts=max(0, job["attempts"]-1), lease_until=0, error="EmbeddingDeferred:" + exc.reason,
+                next_run_at=time.time()+delay, updated_at=db.now()))
+            await conn.execute(update(db.repositories).where(db.repositories.c.id == job["repo_id"],
+                db.repositories.c.active_job_id == job["id"], ~db.repositories.c.status.in_(["deleting", "delete_failed"])).values(
+                status="waiting_embeddings", message=str(exc), updated_at=db.now()))
+        logger.warning("embedding_paused repo_id=%s reason=%s retry_after=%.0f", job["repo_id"], exc.reason, delay)
+        return
     permanent = isinstance(exc, ValueError)
     retry = not permanent and job["attempts"] < settings.JOB_MAX_ATTEMPTS
     status = "retry" if retry else "failed"
@@ -220,7 +239,8 @@ async def run_once():
                     await done.execute(update(db.jobs).where(db.jobs.c.id == job["id"]).values(status="retry", lease_until=0, attempts=max(0, job["attempts"]-1), next_run_at=0, updated_at=db.now()))
                 raise
             except Exception as exc:
-                logger.exception("job_failed job_id=%s repo_id=%s kind=%s attempt=%s", job["id"], job["repo_id"], job["kind"], job["attempts"])
+                if not isinstance(exc, EmbeddingDeferred):
+                    logger.exception("job_failed job_id=%s repo_id=%s kind=%s attempt=%s", job["id"], job["repo_id"], job["kind"], job["attempts"])
                 await _record_failure(job, exc)
             finally:
                 pulse.cancel()
@@ -236,7 +256,34 @@ async def run_once():
                 _sqlite_lock.release()
 
 
+async def recover_legacy_embedding_jobs():
+    """Resume archived imports discarded by the old all-or-nothing quota handling.
+
+    Only the active failed ingestion at the embedding stage is eligible. A
+    persistent marker prevents repeated recovery if a different error remains.
+    """
+    async with db.get_engine().connect() as conn:
+        rows = (await conn.execute(select(db.repositories.c.id, db.repositories.c.user_id, db.jobs.c.id.label("job_id"), db.jobs.c.details)
+            .join(db.jobs, db.repositories.c.active_job_id == db.jobs.c.id)
+            .where(db.repositories.c.status == "failed", db.repositories.c.progress >= 70,
+                db.repositories.c.archive_sha256.is_not(None), db.jobs.c.kind == "ingest",
+                db.jobs.c.status == "failed", db.jobs.c.error == "ClientError").limit(100))).mappings().all()
+    for row in rows:
+        if row["details"].get("legacy_embedding_recovered"):
+            continue
+        try:
+            await enqueue(row["id"], row["user_id"], details={"legacy_embedding_recovered": True}, expected_failed_job_id=row["job_id"])
+            logger.info("legacy_embedding_recovery_queued repo_id=%s", row["id"])
+        except HTTPException as exc:
+            if exc.status_code not in {404, 409}:
+                raise
+
+
 async def worker_loop():
+    try:
+        await recover_legacy_embedding_jobs()
+    except Exception:
+        logger.exception("legacy_embedding_recovery_failed")
     while True:
         try:
             if await run_once():

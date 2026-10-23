@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
+import { hasParsedWorkspace } from "../../lib/repositoryStatus";
 import SearchIcon from "../../assets/icons/search.svg?react";
 import NetworkIcon from "../../assets/icons/network.svg?react";
 import MessageSquareTextIcon from "../../assets/icons/message-square-text.svg?react";
@@ -19,7 +20,7 @@ export default function FilesPanel() {
     selectedFilePath, selectFile, setActiveTab,
     highlightPaths, askInChat, fileNodeByPath,
   } = useWorkspace();
-  const repoReady = repo?.status === "ready";
+  const repoReady = hasParsedWorkspace(repo);
 
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState({});
@@ -113,7 +114,7 @@ export default function FilesPanel() {
                 <button data-testid="files-jump-graph" onClick={() => setActiveTab("graph")} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><NetworkIcon width={10} height={10} /> Graph</button>
               )}
               <button data-testid="files-jump-arch" onClick={() => setActiveTab("arch")} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><GitForkIcon width={10} height={10} /> Architecture</button>
-              <button data-testid="files-jump-ask" onClick={() => askInChat(`Explain what ${selectedFilePath} does and how it fits into the rest of the codebase.`)} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><MessageSquareTextIcon width={10} height={10} /> Ask</button>
+              <button data-testid="files-jump-ask" disabled={repo?.status !== "ready"} title={repo?.status === "ready" ? "Ask about this file" : "Available when AI indexing finishes"} onClick={() => askInChat(`Explain what ${selectedFilePath} does and how it fits into the rest of the codebase.`)} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><MessageSquareTextIcon width={10} height={10} /> Ask</button>
             </div>
           </div>
         )}

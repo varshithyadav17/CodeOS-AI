@@ -3,6 +3,7 @@ import ReactFlow, { Background, Controls, MiniMap, useNodesState, useEdgesState 
 import "reactflow/dist/style.css";
 import { api } from "../../lib/api";
 import KGNodeView from "./KGNodeView";
+import { dependencyPositions, graphEdges, NODE_COLORS } from "../../lib/graphLayout";
 import Loader2Icon from "../../assets/icons/loader-2.svg?react";
 import AlertTriangleIcon from "../../assets/icons/alert-triangle.svg?react";
 import SearchIcon from "../../assets/icons/search.svg?react";
@@ -26,38 +27,14 @@ const VIEWS = [
   { k: "service",    label: "Service",     icon: LayersIcon },
 ];
 
-function layoutPositions(nodes) {
-  const types = {};
-  nodes.forEach((n) => { (types[n.type] ||= []).push(n); });
-  const groups = Object.keys(types);
-  const pos = {};
-  groups.forEach((g, gi) => {
-    const r = (gi + 1) * 260;
-    const arr = types[g];
-    arr.forEach((n, i) => {
-      const a = (i / Math.max(arr.length, 1)) * Math.PI * 2 + gi * 0.4;
-      pos[n.id] = { x: Math.cos(a) * r, y: Math.sin(a) * r };
-    });
-  });
-  return pos;
-}
-
-function buildEdges(edges) {
-  return edges.map((e) => ({
-    id: e.id, source: e.source_id, target: e.target_id, label: e.type,
-    labelStyle: { fill: "rgba(255,255,255,0.5)", fontSize: 9, fontFamily: "JetBrains Mono" },
-    labelBgPadding: [2, 2], labelBgStyle: { fill: "#0A0A0A" },
-    style: { stroke: e.metadata?.in_cycle ? "#FF3B30" : "rgba(255,255,255,0.18)", strokeWidth: e.metadata?.in_cycle ? 2 : 1.2 },
-  }));
-}
-
 export default function ArchitecturePanel({ repoId, repoReady }) {
-  const { selectedNodeId, selectNode, clearSelection, nodeById, askInChat, setActiveTab } = useWorkspace();
+  const { repo, selectedNodeId, selectNode, clearSelection, nodeById, askInChat, setActiveTab } = useWorkspace();
   const [view, setView] = useState("call");
   const [data, setData] = useState({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(false);
   const [graphError, setGraphError] = useState(null);
   const [search, setSearch] = useState("");
+  const [flowInstance, setFlowInstance] = useState(null);
   const [cycles, setCycles] = useState(null);
   const [cyclesError, setCyclesError] = useState(null);
   const [deadCode, setDeadCode] = useState(null);
@@ -136,7 +113,12 @@ export default function ArchitecturePanel({ repoId, repoReady }) {
     return { nodes: keep, edges: annotated.edges.filter((e) => ids.has(e.source_id) && ids.has(e.target_id)) };
   }, [annotated, search]);
 
-  const positions = useMemo(() => layoutPositions(filtered.nodes), [filtered.nodes]);
+  const positions = useMemo(() => dependencyPositions(filtered.nodes, filtered.edges), [filtered.nodes, filtered.edges]);
+  const positionKey = JSON.stringify(positions);
+  useEffect(() => {
+    const timer = setTimeout(() => flowInstance?.fitView({ padding: 0.2, maxZoom: 1 }), 80);
+    return () => clearTimeout(timer);
+  }, [flowInstance, positionKey]);
   const flowNodes = useMemo(
     () => filtered.nodes.map((n) => ({
       id: n.id, type: "kg", position: positions[n.id] || { x: 0, y: 0 },
@@ -144,7 +126,7 @@ export default function ArchitecturePanel({ repoId, repoReady }) {
     })),
     [filtered.nodes, positions, selectedNodeId]
   );
-  const flowEdges = useMemo(() => buildEdges(filtered.edges), [filtered.edges]);
+  const flowEdges = useMemo(() => graphEdges(filtered.edges, selectedNodeId), [filtered.edges, selectedNodeId]);
   const [n, setN, onNodesChange] = useNodesState(flowNodes);
   const [e, setE, onEdgesChange] = useEdgesState(flowEdges);
   useEffect(() => { setN(flowNodes); setE(flowEdges); }, [flowNodes, flowEdges, setN, setE]);
@@ -206,6 +188,7 @@ export default function ArchitecturePanel({ repoId, repoReady }) {
           <SearchIcon width={12} height={12} className="text-white/40" />
           <input
             data-testid="arch-search"
+            aria-label="Filter architecture symbols"
             value={search}
             onChange={(ev) => setSearch(ev.target.value)}
             placeholder="Filter nodes…"
@@ -236,15 +219,15 @@ export default function ArchitecturePanel({ repoId, repoReady }) {
               </div>
             </div>
           )}
-          <ReactFlow nodes={n} edges={e} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={onNodeClick} fitView minZoom={0.1} proOptions={{ hideAttribution: true }}>
+          <ReactFlow onInit={setFlowInstance} nodesConnectable={false} nodes={n} edges={e} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={onNodeClick} fitView minZoom={0.03} proOptions={{ hideAttribution: true }}>
             <Background color="rgba(255,255,255,0.05)" gap={20} />
-            <Controls className="rf-controls-glass" />
-            <MiniMap maskColor="rgba(0,0,0,0.7)" style={{ background: "#0A0A0A", border: "1px solid rgba(255,255,255,0.1)" }} />
+            <Controls className="rf-controls-glass" showInteractive={false} />
+            <MiniMap nodeColor={(node) => NODE_COLORS[node.data.type] || "#5cdbc7"} maskColor="rgba(0,0,0,0.7)" style={{ background: "#0A0A0A", border: "1px solid rgba(255,255,255,0.1)" }} />
           </ReactFlow>
-          <div className="absolute bottom-3 left-3 glass-panel border border-white/10 rounded-xl p-2 text-[10px] mono flex flex-wrap gap-3" data-testid="arch-legend">
+          <div className="absolute bottom-3 left-16 right-36 pointer-events-none glass-panel border border-white/10 rounded-xl p-2 text-[10px] mono flex flex-wrap gap-3" data-testid="arch-legend">
             {[
-              { l: "file", c: "#D500F9" }, { l: "class", c: "#2979FF" },
-              { l: "function/method", c: "#FF9100" }, { l: "package", c: "#00E676" },
+              { l: "file", c: NODE_COLORS.file }, { l: "class", c: NODE_COLORS.class },
+              { l: "function/method", c: NODE_COLORS.function }, { l: "package", c: "#3FC8E8" },
             ].map((x) => (
               <span key={x.l} className="flex items-center gap-1 text-white/60"><span className="w-2 h-2 rounded-full" style={{ background: x.c }} />{x.l}</span>
             ))}
@@ -326,7 +309,7 @@ export default function ArchitecturePanel({ repoId, repoReady }) {
                       className="flex-1 border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] disabled:opacity-40 text-white/70 text-xs py-1.5 rounded-sm flex items-center justify-center gap-1.5">
                       <NetworkIcon width={11} height={11} /> Graph
                     </button>
-                    <button data-testid="arch-ask-chat"
+                    <button data-testid="arch-ask-chat" disabled={repo?.status !== "ready"} title="Ask about this symbol once AI indexing finishes"
                       onClick={() => askInChat(`Explain ${selectedInfo?.qualified_name || selectedInfo?.label} in ${selectedInfo?.file || "this repo"} — what does it do and why might it matter architecturally?`)}
                       className="flex-1 border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/70 text-xs py-1.5 rounded-sm flex items-center justify-center gap-1.5">
                       <MessageSquareTextIcon width={11} height={11} />

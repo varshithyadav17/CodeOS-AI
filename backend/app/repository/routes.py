@@ -22,8 +22,8 @@ async def authorized_repo(repo_id, user, ready=False):
     repo = await db.get_repo_repo().get(repo_id)
     if not repo or repo.user_id != user.id:
         raise HTTPException(404, "Repository not found")
-    if ready and repo.status != "ready":
-        raise HTTPException(409, "Repository must be ready before using this feature.")
+    if ready and (repo.status not in {"ready", "embedding", "waiting_embeddings"} or not repo.file_manifest):
+        raise HTTPException(409, "Repository parsing must finish before using this feature.")
     return repo
 
 

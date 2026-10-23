@@ -38,6 +38,9 @@ class Settings:
     LLM_REQUESTS_PER_MINUTE = int(os.getenv("LLM_REQUESTS_PER_MINUTE", "5"))
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
     EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "768"))
+    EMBEDDING_REQUESTS_PER_MINUTE = int(os.getenv("EMBEDDING_REQUESTS_PER_MINUTE", "5"))
+    EMBEDDING_INPUTS_PER_MINUTE = int(os.getenv("EMBEDDING_INPUTS_PER_MINUTE", "40"))
+    EMBEDDING_TOKENS_PER_MINUTE = int(os.getenv("EMBEDDING_TOKENS_PER_MINUTE", "8000"))
     AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "90"))
     INTERACTIVE_TIMEOUT_SECONDS = float(os.getenv("INTERACTIVE_TIMEOUT_SECONDS", "105"))
     S3_BUCKET = os.getenv("S3_BUCKET", "codeos-archives")
@@ -91,5 +94,7 @@ def validate_startup_config() -> None:
         errors.append("INTERACTIVE_TIMEOUT_SECONDS must be greater than 0 and at most 110.")
     if not 1 <= settings.LLM_REQUESTS_PER_MINUTE <= 1000:
         errors.append("LLM_REQUESTS_PER_MINUTE must be between 1 and 1000.")
+    if not 1 <= settings.EMBEDDING_REQUESTS_PER_MINUTE <= 1000 or settings.EMBEDDING_INPUTS_PER_MINUTE < 8 or settings.EMBEDDING_TOKENS_PER_MINUTE < 4000:
+        errors.append("Embedding limits require 1–1000 requests/minute, at least 8 inputs/minute and 4000 estimated tokens/minute.")
     if errors:
         raise RuntimeError("Configuration errors:\n- " + "\n- ".join(errors))

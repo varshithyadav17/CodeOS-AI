@@ -31,6 +31,10 @@ jobs:
     env:
       CODEOS_TEST_POSTGRES_URL: postgresql+asyncpg://codeos_test:isolated_ci_password@localhost:5432/codeos_test
       CODEOS_BROWSER_CHANNEL: chrome
+      CODEOS_LIVE_GITHUB_TESTS: '1'
+      CODEOS_QA_GRAPH_SCREENSHOT: qa/graph-desktop.png
+      CODEOS_QA_GRAPH_MOBILE_SCREENSHOT: qa/graph-mobile.png
+      CODEOS_BROWSER_REPORT: qa/browser-report.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -95,9 +99,17 @@ jobs:
           print('PASS two 512 MB containers migrated PostgreSQL and started on PORT')
           PY
       - run: npm run lint --prefix frontend
+      - run: node --test frontend/src/lib/graphLayout.test.js
       - name: Verify runner Chrome
         run: google-chrome --version
-      - run: python scripts/verify_browser.py
+      - run: mkdir -p qa && python scripts/verify_browser.py
+      - name: Save browser verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-verification
+          path: qa/
+          retention-days: 7
       - name: Inspect real public Google sign-in button
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true

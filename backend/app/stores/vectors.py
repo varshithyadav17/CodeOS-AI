@@ -3,10 +3,22 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import math
+import httpx
 
 from qdrant_client import AsyncQdrantClient, models
 from ..config import settings
 from ..models import CodeChunk
+from ..embedding_limits import EmbeddingBudget, EmbeddingDeferred, embedding_batches, embedding_retry_hint
+
+_budgets = {}
+
+
+def _embedding_budget():
+    key = (settings.GEMINI_API_KEY, settings.EMBEDDING_MODEL)
+    if key not in _budgets:
+        _budgets[key] = EmbeddingBudget(settings.EMBEDDING_REQUESTS_PER_MINUTE,
+            settings.EMBEDDING_INPUTS_PER_MINUTE, settings.EMBEDDING_TOKENS_PER_MINUTE)
+    return _budgets[key]
 
 
 class GeminiEmbedder:
@@ -20,21 +32,30 @@ class GeminiEmbedder:
             raise RuntimeError("Set GEMINI_API_KEY to enable code embeddings and AI answers.")
         if self._client is None:
             self._client = genai.Client(api_key=settings.GEMINI_API_KEY,
-                http_options=types.HttpOptions(timeout=settings.AI_TIMEOUT_SECONDS * 1000))
-        result = None
-        for attempt in range(3):
+                http_options=types.HttpOptions(timeout=settings.AI_TIMEOUT_SECONDS * 1000,
+                    retry_options=types.HttpRetryOptions(attempts=1)))
+        vectors = []
+        budget = _embedding_budget()
+        for batch in embedding_batches(texts):
+            await budget.wait(batch)
             try:
-                result = await self._client.aio.models.embed_content(
-                    model=settings.EMBEDDING_MODEL, contents=texts,
-                    config=types.EmbedContentConfig(
-                        task_type="RETRIEVAL_QUERY" if query else "RETRIEVAL_DOCUMENT",
-                        output_dimensionality=settings.EMBEDDING_DIMENSIONS))
-                break
+                async with asyncio.timeout(settings.AI_TIMEOUT_SECONDS):
+                    result = await self._client.aio.models.embed_content(
+                        model=settings.EMBEDDING_MODEL, contents=batch,
+                        config=types.EmbedContentConfig(
+                            task_type="RETRIEVAL_QUERY" if query else "RETRIEVAL_DOCUMENT",
+                            output_dimensionality=settings.EMBEDDING_DIMENSIONS))
             except Exception as exc:
-                if attempt == 2 or getattr(exc, "code", None) not in {429, 500, 502, 503, 504}:
+                code = getattr(exc, "code", None)
+                if code not in {429, 500, 502, 503, 504} and not isinstance(exc, (TimeoutError, ConnectionError, httpx.TransportError)):
                     raise
-                await asyncio.sleep(2**attempt)
-        vectors = [list(e.values) for e in (result.embeddings or [])]
+                delay, reason = embedding_retry_hint(exc)
+                budget.defer(delay, reason)
+                raise EmbeddingDeferred(delay, reason) from exc
+            received = [list(e.values) for e in (result.embeddings or [])]
+            if len(received) != len(batch):
+                raise RuntimeError("Embedding service returned an unexpected number of vectors.")
+            vectors.extend(received)
         if len(vectors) != len(texts):
             raise RuntimeError("Embedding service returned an unexpected number of vectors.")
         for vector in vectors:
@@ -82,8 +103,16 @@ class QdrantVectorStore:
             models.FieldCondition(key="embedding_fingerprint", match=models.MatchValue(value=self.fingerprint))])
 
     async def upsert(self, chunks):
-        for i in range(0, len(chunks), 32):
-            batch = chunks[i:i + 32]
+        for candidates in embedding_batches(chunks, text=lambda c: c.text):
+            # Stable content IDs let a resumed batch reuse points saved before
+            # a worker restart or a quota pause, without embedding them again.
+            existing = await self.client.retrieve(self.collection, ids=[c.id for c in candidates],
+                with_payload=["repo_id", "embedding_fingerprint"], with_vectors=False)
+            owned = {p.id for p in existing if (p.payload or {}).get("embedding_fingerprint") == self.fingerprint
+                     and any(c.id == p.id and c.repo_id == (p.payload or {}).get("repo_id") for c in candidates)}
+            batch = [c for c in candidates if c.id not in owned]
+            if not batch:
+                continue
             vectors = await self.embedder.embed([c.text for c in batch])
             points = [models.PointStruct(id=c.id, vector={self.vector_name: v},
                 payload={**c.model_dump(exclude={"score"}), "embedding_fingerprint": self.fingerprint}) for c, v in zip(batch, vectors)]

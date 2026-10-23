@@ -14,3 +14,4 @@ coverage.xml
 htmlcov/
 playwright-report/
 test-results/
+qa/

@@ -56,7 +56,7 @@ Changing `LLM_MODEL` does not require re-indexing. Changing the embedding model 
 - Retry re-ingestion after correcting service configuration. Ready repositories always reuse their stored archive.
 - `DELETE /api/repos/{id}` returns 202 and a job ID. Wait for removal from the list; a queued deletion is not yet a completed deletion.
 - If deletion fails after retry limits, the list shows `delete_failed`. Press Delete again to start a new safe cleanup job.
-- Missing Gemini configuration causes indexing or AI requests to fail visibly; no placeholder AI engine or fake vectors are substituted.
+- Missing Gemini configuration causes indexing or AI requests to fail visibly; no placeholder AI engine or fake vectors are substituted. Embedding quota pauses preserve files and graph, and resume automatically from saved progress. `EMBEDDING_REQUESTS_PER_MINUTE`, `EMBEDDING_INPUTS_PER_MINUTE`, and `EMBEDDING_TOKENS_PER_MINUTE` tune the single-process budget; defaults are 5, 40, and 8000. Actual project quota may be lower.
 - Abrupt host/process termination can leave operating-system temporary directories. Run APIs/workers in ephemeral containers with an appropriately sized temporary volume; normal Python exceptions, timeouts and cancellations clean their workspaces. A killed process cannot run a `finally` block.
 
 ## Existing MongoDB data

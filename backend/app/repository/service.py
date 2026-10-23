@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import base64
+import hashlib
 import ipaddress
 import logging
 import os
@@ -18,6 +19,7 @@ from ..config import settings
 from ..jobs import check_job, JobCancelled, save_details
 from ..security import decrypt_credential
 from ..models import RepoStats
+from ..embedding_limits import EmbeddingDeferred, embedding_batches
 from ..utils import blocking
 from .archive import safe_extract, archive_tree, sha256
 from .graph import GraphBuilder
@@ -88,7 +90,14 @@ async def clone_github(url, dest, branch=None, job=None):
                 raise ValueError("GitHub clone exceeds the configured resource limit.")
         _, stderr = await output
         if process.returncode:
-            raise ValueError("GitHub clone failed. Check the URL, branch, and provided access token permissions.")
+            failure = stderr.decode("utf-8", errors="replace").lower()
+            if any(term in failure for term in ("could not resolve host", "failed to connect", "connection timed out", "connection reset")):
+                raise ConnectionError("GitHub could not be reached. The import will retry.")
+            if "remote branch" in failure or "couldn't find remote ref" in failure:
+                raise ValueError("That branch was not found. Leave Branch empty to use the repository's default branch.")
+            if "repository not found" in failure or "authentication failed" in failure or "could not read username" in failure:
+                raise ValueError("GitHub could not open this repository. Check its URL; private repositories need a token with repository contents read access.")
+            raise ValueError("GitHub clone failed. Check the URL, branch, and provided token's repository access.")
     finally:
         if process.returncode is None:
             process.kill()
@@ -135,11 +144,15 @@ class IngestionService:
 
     async def run(self, job):
         repo = await self.repos.get(job["repo_id"])
+        started = time.monotonic()
+        checkpoint = job.get("details", {}).get("index_checkpoint", {})
         # Context management covers success, exceptions, cancellation and timeouts.
         with tempfile.TemporaryDirectory(prefix="codeos-ingest-") as temporary:
             work = Path(temporary)
             archive, root = work / "source.zip", work / "src"
-            await self._update(job, status="cloning", progress=5, message="Loading repository archive")
+            await self._update(job, status="embedding" if checkpoint.get("graph_ready") else "cloning",
+                progress=repo.progress if checkpoint.get("graph_ready") else 5,
+                message="Resuming saved AI indexing" if checkpoint.get("graph_ready") else "Loading repository archive")
             if repo.source == "github" and not repo.archive_sha256:
                 clone = work / "clone"
                 commit = await clone_github(repo.source_url, clone, repo.branch, job)
@@ -164,7 +177,8 @@ class IngestionService:
             # Normalize GitHub-style ZIPs with a single wrapper directory.
             children = [p for p in root.iterdir() if p.name != "__MACOSX"]
             source_root = children[0] if repo.source == "zip" and len(children) == 1 and children[0].is_dir() else root
-            await self._update(job, status="parsing", progress=25, message="Parsing source and building symbols")
+            if not checkpoint.get("graph_ready"):
+                await self._update(job, status="parsing", progress=25, message="Parsing source and building symbols")
             parsed = await blocking(ParserService().parse_repo, source_root)
             if not parsed:
                 raise ValueError("No supported source or documentation files were found in the archive.")
@@ -176,29 +190,57 @@ class IngestionService:
             chunks = await blocking(EmbeddingService().build_chunks, repo.id, parsed, qnames)
             if not chunks:
                 raise ValueError("Repository contains no non-empty text to index.")
-            await self._update(job, status="parsing", progress=50, message="Replacing the repository graph")
-            # Every attempt starts from a clean namespace; stable IDs also make upserts repeatable.
+            fingerprint = hashlib.sha256(("index-v2:" + repo.archive_sha256 + ":" + self.vectors.fingerprint
+                + ":" + ":".join(c.id for c in chunks)).encode()).hexdigest()
             await self.graph.initialize()
             await self.vectors.initialize()
             await check_job(job)
-            await self.graph.delete_repo(repo.id)
-            await self.vectors.delete_namespace(repo.id)
-            await check_job(job)
-            await self.graph.upsert_nodes(nodes)
-            await self.graph.upsert_edges(edges)
-            await self._update(job, status="embedding", progress=70, message="Embedding code into Qdrant")
-            # Cancellation is checked between bounded embedding/write batches.
-            for offset in range(0, len(chunks), 32):
+            resume = checkpoint.get("fingerprint") == fingerprint and checkpoint.get("graph_ready")
+            if resume:
+                resume = (await self.graph.count_nodes(repo.id), await self.graph.count_edges(repo.id)) == (len(nodes), len(edges))
+                resume = resume and await self.vectors.count(repo.id) >= checkpoint.get("offset", 0)
+            if not resume:
+                await self._update(job, status="parsing", progress=50, message="Building repository relationships")
+                await save_details(job, index_checkpoint={})
+                await self.graph.delete_repo(repo.id)
+                await self.vectors.delete_namespace(repo.id)
                 await check_job(job)
-                await self.vectors.upsert(chunks[offset:offset+32])
-                await self._update(job, progress=min(94, 70 + int(24 * (offset+32) / len(chunks))))
+                await self.graph.upsert_nodes(nodes)
+                await self.graph.upsert_edges(edges)
+                if (await self.graph.count_nodes(repo.id), await self.graph.count_edges(repo.id)) != (len(nodes), len(edges)):
+                    raise RuntimeError("Graph count verification failed.")
+                checkpoint = {"fingerprint": fingerprint, "graph_ready": True, "offset": 0}
+                await save_details(job, index_checkpoint=checkpoint)
+            languages = {}
+            for file in parsed:
+                languages[file.language] = languages.get(file.language, 0) + 1
+            offset = checkpoint.get("offset", 0)
+            stats = RepoStats(files=len(parsed), loc=sum(f.loc for f in parsed), nodes=len(nodes),
+                edges=len(edges), chunks=offset, chunks_total=len(chunks))
+            await self._update(job, status="embedding", progress=70 + int(24 * offset / len(chunks)),
+                message=f"Files and graph ready. AI indexing: {offset}/{len(chunks)} chunks.",
+                file_manifest=manifest, language_breakdown=languages, stats=stats.model_dump())
+            logger.info("ingestion_index repo_id=%s files=%d nodes=%d edges=%d chunks=%d completed=%d resumed=%s",
+                repo.id, len(parsed), len(nodes), len(edges), len(chunks), offset, bool(resume))
+            # Checkpoint only completed writes. Each batch also reuses existing
+            # Qdrant IDs if shutdown interrupted the checkpoint transaction.
+            for batch in embedding_batches(chunks[offset:], text=lambda c: c.text):
+                await check_job(job)
+                if time.monotonic() - started > max(30, settings.INGEST_TIMEOUT_SECONDS - 120):
+                    raise EmbeddingDeferred(5, "continuation")
+                await self.vectors.upsert(batch)
+                offset += len(batch)
+                checkpoint = {**checkpoint, "offset": offset}
+                await save_details(job, index_checkpoint=checkpoint, quota_deferrals=0)
+                logger.info("embedding_progress repo_id=%s completed=%d total=%d", repo.id, offset, len(chunks))
+                stats.chunks = offset
+                await self._update(job, progress=min(94, 70 + int(24 * offset / len(chunks))),
+                    message=f"Files and graph ready. AI indexing: {offset}/{len(chunks)} chunks.", stats=stats.model_dump())
             await check_job(job)
             actual = (await self.graph.count_nodes(repo.id), await self.graph.count_edges(repo.id), await self.vectors.count(repo.id))
             if actual != (len(nodes), len(edges), len(chunks)):
                 raise RuntimeError("Index count verification failed.")
-            languages = {}
-            for file in parsed:
-                languages[file.language] = languages.get(file.language, 0) + 1
-            stats = RepoStats(files=len(parsed), loc=sum(f.loc for f in parsed), nodes=len(nodes), edges=len(edges), chunks=len(chunks))
+            logger.info("ingestion_ready repo_id=%s files=%d chunks=%d", repo.id, len(parsed), len(chunks))
+            stats.chunks = len(chunks)
             await self._update(job, status="ready", progress=100, message="Ready", file_manifest=manifest,
                 language_breakdown=languages, stats=stats.model_dump())

@@ -8,6 +8,7 @@ import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { ErrorState } from "../../components/EmptyState";
 import { SkeletonGrid } from "../../components/Skeleton";
 import { useWorkspace } from "../../context/WorkspaceContext";
+import { hasParsedWorkspace } from "../../lib/repositoryStatus";
 
 const KnowledgeGraph = lazy(() => import("./KnowledgeGraph"));
 const ChatPanel = lazy(() => import("./ChatPanel"));
@@ -73,11 +74,11 @@ function Workspace() {
       <div className="mt-3"><SelectionBar /></div>
 
       <TabsContent value="chat" className="mt-4 animate-in fade-in duration-150">
-        <ErrorBoundary label="ChatPanel"><Suspense fallback={<PanelFallback />}><ChatPanel repoId={repo.id} repoReady /></Suspense></ErrorBoundary>
+        {repo.status === "ready" ? <ErrorBoundary label="ChatPanel"><Suspense fallback={<PanelFallback />}><ChatPanel repoId={repo.id} repoReady /></Suspense></ErrorBoundary> : <IndexingNotice />}
       </TabsContent>
 
       <TabsContent value="review" className="mt-4 animate-in fade-in duration-150">
-        <ErrorBoundary label="ReviewPanel"><Suspense fallback={<PanelFallback />}><ReviewPanel repoId={repo.id} repoReady /></Suspense></ErrorBoundary>
+        {repo.status === "ready" ? <ErrorBoundary label="ReviewPanel"><Suspense fallback={<PanelFallback />}><ReviewPanel repoId={repo.id} repoReady /></Suspense></ErrorBoundary> : <IndexingNotice />}
       </TabsContent>
 
       <TabsContent value="arch" className="mt-4 animate-in fade-in duration-150">
@@ -85,15 +86,6 @@ function Workspace() {
       </TabsContent>
 
       <TabsContent value="graph" className="mt-4 space-y-3 animate-in fade-in duration-150">
-        <div className="flex flex-wrap items-center gap-3 text-[11px] mono">
-          {[
-            { l: "file", c: "#D500F9" }, { l: "class", c: "#2979FF" },
-            { l: "function", c: "#FF9100" }, { l: "method", c: "#FF9100" },
-          ].map((x) => (
-            <span key={x.l} className="flex items-center gap-1.5 text-white/60"><span className="w-2 h-2 rounded-full" style={{ background: x.c }} aria-hidden="true" />{x.l}</span>
-          ))}
-          <span className="text-white/30">Click a node to select it across the workspace. Relationships connect nodes on the current page.</span>
-        </div>
         <ErrorBoundary label="KnowledgeGraph"><Suspense fallback={<PanelFallback />}><KnowledgeGraph nodes={graph.nodes} edges={graph.edges} /></Suspense></ErrorBoundary>
       </TabsContent>
 
@@ -101,13 +93,22 @@ function Workspace() {
         <ErrorBoundary label="FilesPanel"><Suspense fallback={<PanelFallback />}><FilesPanel /></Suspense></ErrorBoundary>
       </TabsContent>
       <TabsContent value="docs" className="mt-4 animate-in fade-in duration-150">
-        <ErrorBoundary label="DocumentationPanel"><Suspense fallback={<PanelFallback />}><DocumentationPanel repoId={repo.id} /></Suspense></ErrorBoundary>
+        {repo.status === "ready" ? <ErrorBoundary label="DocumentationPanel"><Suspense fallback={<PanelFallback />}><DocumentationPanel repoId={repo.id} /></Suspense></ErrorBoundary> : <IndexingNotice />}
       </TabsContent>
       <TabsContent value="timeline" className="mt-4 animate-in fade-in duration-150">
         <ErrorBoundary label="Timeline"><Suspense fallback={<PanelFallback />}><TimelinePanel key={repo.id} repoId={repo.id} /></Suspense></ErrorBoundary>
       </TabsContent>
     </Tabs>
   );
+}
+
+function IndexingNotice() {
+  const { repo, setActiveTab } = useWorkspace();
+  return <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-6" data-testid="ai-indexing-notice" role="status">
+    <h2 className="font-medium text-cyan-100">Your code is parsed. AI search is still indexing.</h2>
+    <p className="mt-2 text-sm text-white/60">{repo.message} Completed {repo.stats.chunks} of {repo.stats.chunks_total} chunks.</p>
+    <button onClick={() => setActiveTab("graph")} className="mt-4 text-sm text-cyan-300 underline">Explore the graph while you wait</button>
+  </div>;
 }
 
 export default function RepoDetail() {
@@ -123,7 +124,7 @@ export default function RepoDetail() {
   useEffect(() => {
     if (!repo) return;
     if (["ready", "failed", "delete_failed"].includes(repo.status)) return;
-    const t = setInterval(() => pollRepoStatus(id), 2500);
+    const t = setInterval(() => pollRepoStatus(id), repo.status === "waiting_embeddings" ? 10000 : 2500);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, repo?.status]);
@@ -143,7 +144,7 @@ export default function RepoDetail() {
   return (
     <div className="p-6 md:p-8 space-y-5" data-testid="repo-detail-root">
       <WorkspaceHeader repo={repo} />
-      {repo.status === "ready" && <Workspace />}
+      {hasParsedWorkspace(repo) && <Workspace />}
     </div>
   );
 }
