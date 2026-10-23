@@ -1,59 +1,55 @@
-# Live verification — 23 October 2026 (India)
+# Live verification — 23 October 2026
 
-## Current status
+The app is live at **https://codeos-ai-two.vercel.app**. Application revision `9216d4a51d3296a719683517e521d65e6884459d` merged through [PR #2](https://github.com/varshithyadav17/CodeOS-AI/pull/2) and automatically deployed to the existing Vercel and free Render services.
 
-The free API is live at https://codeos-api.onrender.com. Authenticated readiness passes PostgreSQL, Backblaze archives, Neo4j and Qdrant. Generation uses `gemini-3.5-flash-lite`; embeddings remain `gemini-embedding-001`, 768 dimensions.
+## Import failure resolved
 
-The owner restored the current Aura connection after an authentication regression. Actual graph-backed chat now passes. All four Neo4j settings use manual `sync: false` values so later Blueprint syncs preserve the saved connection.
+The failed import had already cloned and parsed successfully. Gemini returned embedding quota errors, and the old failure handler discarded the partial graph and vectors before retrying from zero.
 
-The app is published at **https://codeos-ai-two.vercel.app**. The tested release merged through [PR #1](https://github.com/varshithyadav17/CodeOS-AI/pull/1). Vercel and the existing Render application service follow `main`; Render automatic deployments are enabled after checks pass. Live same-origin login/reload/logout, Secure/HttpOnly/SameSite cookies, provider readiness, repository APIs and four SPA routes all passed. Personal Google consent requires a real account.
+The updated pipeline saves source metadata and the verified graph first, indexes bounded batches with durable offsets, and preserves completed embeddings across quota pauses and worker continuations. Graph, source and architecture remain available while AI indexing waits. Requests and estimated input tokens share one conservative process-wide embedding budget. Explicit provider retry hints are honored; quota pauses do not exhaust the ordinary failure-attempt limit.
 
-## Actual checks
+The existing failed **148-file repository** recovered automatically from its stored archive. Production logs verified **1,201 nodes, 1,764 relationships and 249 chunks**. A continuation resumed from **210 completed chunks** with `resumed=True`; all **249/249** chunks completed and the repository reached `ready` at **11:01 UTC / 16:31 India time**. The full import took about 35 minutes under the free-provider pacing; its graph was available earlier.
 
-| Flow | Result | Scope |
-| --- | --- | --- |
-| Provider readiness | Passed | PostgreSQL, private archives, Neo4j and Qdrant; current generation model configured |
-| Authentication | Passed | Signup, Secure cookie session, session reload, logout rejection and sign-in again |
-| Google button/configuration | Passed on production | Actual Google iframe loaded with HTTP 200; enabled backend challenge, valid client ID shape, no origin errors and no uncaught browser errors; personal consent unverified |
-| ZIP ingestion/re-ingestion | Passed | Real archive storage, parsing, graph writes, Gemini embeddings and reuse of the stored archive |
-| File preview/graph | Passed | Original archive extraction, four nodes and four relationships for a two-file QA repository |
-| Free-model chat | Passed | Actual Flash-Lite answer, two sources and four graph relationships |
-| Architecture | Passed | Four graph views, cycle/dead-code checks, impact and execution flow |
-| Dashboard/Memory | Passed | Indexed statistics; memory creation, edit, search, deletion and idempotent review import |
-| Documentation | Passed | Actual Flash-Lite README generation; persistence and ZIP export also verified earlier |
-| Review | Passed | All six specialists completed with actual Flash-Lite output; manager produced a non-fallback summary and action plan |
-| Public GitHub/Timeline | Passed | Real Spoon-Knife clone/embeddings; commit, README history and contributor retained; shallow diff counts explicitly unavailable |
-| Coordinated deletion | Passed | All three disposable QA repositories removed through tracked SQL/graph/vector/archive-version cleanup, including the final two through the production proxy |
-| UI verification | Passed in CI | All 31 application browser checks, zero uncaught errors; AI, Google and populated Timeline scenarios use explicit substitutes. Separate public-login diagnostic loads the real Google button |
-| Production forwarding | Passed | Login, cookie flags, session reload, logout→401, health/readiness, Dashboard statistics, repository status/files/graph/docs/conversations/reviews and login/dashboard/repository/Memory SPA routes |
+## Graph and parsing changes
 
-## Free AI configuration
+The code map now offers file clusters and directed dependency layers, symbol/path search, node and relationship filters, connection focus, an inspector, source navigation, colored minimap and mobile layout. Cyclic components stay together; architecture views use the same dependency layout. Search and relationship counts explicitly apply to the displayed graph page.
 
-The previous `gemini-3.8-flash` model reported five generation requests per minute and 20 per day for this project. Overloaded requests also consumed its allowance. Generation and retries now share a paced queue, provider cooldowns reach waiting calls, and daily quota errors are not retried as minute limits. Background reviews may take several minutes; interactive routes keep a 105-second deadline.
+Parser regressions also exposed missing C/C++ function names and Ruby method/class extraction. Those cases are fixed and covered alongside Go, Rust, Java, TypeScript, C#, PHP, Python and JSX examples.
 
-The demo selects Google's supported free `gemini-3.5-flash-lite`, with medium thinking and deprecated sampling parameters omitted. Actual chat, documentation, six review specialists and manager calls passed. No billing, paid key or extra project was enabled. Provider quotas and availability can still change.
+## Verification results
 
-The limiter operates within the single API process, by API key/model, at a conservative five requests per minute. Multiple independent processes would require a shared limiter.
+| Check | Result and scope |
+| --- | --- |
+| Main release CI | **105 backend tests passed**, two opt-in store-test skips; three graph layout tests, lint, production build, non-root container and two concurrent 512 MB PostgreSQL startup containers passed |
+| Application browser suite | **33 checks passed, zero uncaught errors**; production frontend with explicit local AI/Google substitutes and real Qdrant local; covers quota-paused source/architecture access and deletion |
+| Actual production browser | **8 checks passed, zero uncaught errors**, Chrome 155.0.8059.39; canonical public origin, real signup/API/stores/embeddings, graph controls, source, architecture, mobile layout, cookie reload, deletion, logout and email sign-in again; no substituted HTTP responses |
+| Provider readiness | PostgreSQL, private Backblaze archives, Neo4j and Qdrant all passed; current Gemini generation and embedding configuration retained |
+| Live ZIP ingestion | Original archive retained; three-file QA repository produced five nodes, four relationships and three real embeddings; repeat ingestion preserved exact statistics |
+| Live GitHub clone | Actual public Spoon-Knife clone and embeddings completed; source commit, timeline and source previews passed |
+| Architecture | Four views plus cycle, dead-code, impact and execution-flow endpoints passed against real Neo4j |
+| Actual Gemini chat | Answer persisted with three source citations and four graph relationships; two-message conversation history verified |
+| Actual Gemini documentation | README generation, persistence and ZIP export passed |
+| Actual Gemini review | All six specialists completed; manager produced a summary and seven action items; eleven findings imported into Memory without duplicates |
+| Memory and Dashboard | Memory creation, status change, search and deletion passed; authenticated Dashboard data passed |
+| Session and cleanup | Secure/HttpOnly/SameSite=Lax session, authenticated reload, logout→401 and sign-in again passed; this verification's three QA repositories were deleted through tracked cleanup |
+| Google button/configuration | Main-branch diagnostic loaded the actual Google iframe with HTTP 200, enabled challenge and no origin or uncaught errors; personal Google consent was not attempted |
 
-## Regression evidence
+Evidence:
 
-- Local: 83 backend tests passed, four opt-in skips; Ruff and frontend lint/build passed.
-- Full production-release CI on `1524e23`: 84 backend tests passed, three opt-in skips; Docker/non-root execution and two concurrent 512 MB startup containers passed. All 31 browser checks passed with zero uncaught errors using Chrome 155.0.8059.39.
-- Evidence: https://github.com/varshithyadav17/CodeOS-AI/actions/runs/39873930978
-- Regressions cover actual Google SDK error shapes, supported Flash-Lite parameters, concurrent generation with overloaded requests, shared cooldowns, cancellation, and actual shallow Git history including an empty commit message.
-- Main-branch CI additionally passed its optional anonymous diagnostic of the public login and real Google button. No Google response is substituted and no account sign-in or consent is attempted. External availability does not block backend releases; inspect the diagnostic result separately.
+- [Full main-branch release CI and real Google-button diagnostic](https://github.com/varshithyadav17/CodeOS-AI/actions/runs/39938628073)
+- [Actual production UI verification, report and screenshots](https://github.com/varshithyadav17/CodeOS-AI/actions/runs/39978767135)
+- Production UI verification code is preserved on `codex/production-ui-verification`; it creates its own disposable account and touches only that account's QA repository.
 
-## Deployment evidence
+## Deployment and free services
 
-- Application/configuration revision: `1524e23828a6747989bcc185562e683d96fd8d1f` on `main`. Later documentation-only commits do not alter the application.
-- Vercel production: `dpl_4fEyx3fTigWL56vYk982426TUQSj`, READY at that revision.
-- Render: `dep-dbda1om1egvs738ej0qg` is live at the same application revision, automatically deployed by `new_commit` after successful main-branch CI. The service reports `branch: main`, `autoDeploy: yes`, `autoDeployTrigger: checksPass`, and `plan: free`. No error-level application logs appeared in the checked interval after startup.
-- The Blueprint infrastructure source can still monitor the original candidate branch. Application updates deploy from main; infrastructure edits must also reach that source until it is moved in the Render Dashboard. Do not create another Blueprint.
+- Vercel production: `dpl_ZuEEvwCfAUQaS3mV8oo4f2UjhKHa`, READY at application revision `9216d4a`.
+- Render: `dep-dbdjc2dbedkc73d2eajg`, live at the same revision; automatic `new_commit` deployment after successful main-branch checks. Service remains `branch: main`, `autoDeploy: yes`, `autoDeployTrigger: checksPass`, `plan: free`.
+- API: https://codeos-api.onrender.com. No error-level application logs appeared during the final live verification interval.
+- Generation remains `gemini-3.5-flash-lite`; embeddings remain `gemini-embedding-001`, 768 dimensions, with the existing Qdrant collection. No billing, paid resources or extra worker were enabled.
+- All four Neo4j settings remain manual `sync: false` values so Blueprint synchronization preserves the working connection.
 
-## Remaining boundaries
+## Boundaries
 
-- Complete personal Google consent on the canonical origin. Private GitHub token access was not tested.
+Personal Google consent and private-repository token access require an account-specific check and were not exercised. Actual provider quota and availability can vary. Embedding pacing uses estimated tokens and one API process; multiple independent processes would need a shared budget. Free hosting can sleep while idle and continues pending work when it wakes.
 
-Free PostgreSQL expires on 21 November 2026 in India; the owner accepts this for the portfolio demo. Any older MongoDB data remains separate: no historical migration or deletion was performed. ZIP uploads have no Git history, and depth-one GitHub snapshots cannot provide full historical churn. No production load or availability guarantee is made.
-
-References: [Flash-Lite model](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite), [free pricing](https://ai.google.dev/gemini-api/docs/pricing), [model parameter changes](https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.6).
+Free PostgreSQL expires on 21 November 2026 in India; the owner accepts this for the portfolio demo. ZIP uploads have no Git history, and depth-one GitHub snapshots cannot provide complete historical churn. No historical MongoDB data was migrated or deleted, and no production load or availability guarantee is implied by these checks.
