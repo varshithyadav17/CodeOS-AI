@@ -43,7 +43,7 @@ export default function WorkspaceHeader({ repo }) {
   const running = ["queued", "cloning", "parsing", "embedding", "deleting"].includes(repo.status);
 
   return (
-    <div className="border-b border-white/10 px-6 py-3 flex items-center gap-4 flex-wrap" data-testid="workspace-header">
+    <div className="border-b border-white/10 px-0 sm:px-6 py-3 flex items-center gap-4 flex-wrap" data-testid="workspace-header">
       <Link to="/repositories" className="text-white/50 hover:text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8] rounded-sm" aria-label="Back to repositories">
         <ArrowLeftIcon width={16} height={16} aria-hidden="true" />
       </Link>
@@ -67,7 +67,7 @@ export default function WorkspaceHeader({ repo }) {
       {repo.message && repo.status !== "ready" && <p role="status" className="text-xs text-white/60 w-full">{repo.message}</p>}
       {["failed", "delete_failed"].includes(repo.status) && <Link to="/repositories" className="text-xs text-[#3FC8E8]">Open repositories to retry or delete</Link>}
       {hasParsedWorkspace(repo) && (
-        <div className="flex items-center gap-4 text-xs">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs min-w-0">
           {STATS.map(({ l, k, i: StatIcon }) => (
             <div key={k} className="flex items-center gap-1.5 text-white/50" data-testid={`workspace-stat-${k}`}>
               <StatIcon width={11} height={11} aria-hidden="true" />

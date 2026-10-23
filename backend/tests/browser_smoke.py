@@ -35,7 +35,7 @@ async def main():
     errors=[]
     checks=[]
     async with async_playwright() as p:
-        browser=await p.chromium.launch(channel=os.getenv("CODEOS_BROWSER_CHANNEL"),headless=True,args=["--no-sandbox"])
+        browser=await p.chromium.launch(channel=os.getenv("CODEOS_BROWSER_CHANNEL"),executable_path=os.getenv("CODEOS_BROWSER_EXECUTABLE"),headless=True,args=["--no-sandbox"])
         browser_version=browser.version
         page=await browser.new_page(viewport={"width":1440,"height":1000})
         page.on("pageerror",lambda error:errors.append(str(error)))
@@ -265,9 +265,12 @@ async def main():
         await expect(page.get_by_test_id("arch-graph").locator(".react-flow__node").first).to_be_visible()
         await page.get_by_test_id("tab-graph").click()
         await page.set_viewport_size({"width":390,"height":844})
-        assert await page.locator("main").evaluate("el => el.scrollWidth <= el.clientWidth + 1"), "Mobile graph overflows horizontally"
         if os.getenv("CODEOS_QA_GRAPH_MOBILE_SCREENSHOT"):
-            await page.screenshot(path=os.environ["CODEOS_QA_GRAPH_MOBILE_SCREENSHOT"], full_page=True)
+            await expect(page.get_by_test_id("tab-graph")).to_have_attribute("data-state", "active")
+            await page.get_by_test_id("knowledge-graph").screenshot(path=os.environ["CODEOS_QA_GRAPH_MOBILE_SCREENSHOT"], animations="disabled")
+        overflow = await page.locator("main").evaluate("""el => ({width:el.clientWidth, scroll:el.scrollWidth,
+          outside:[...el.querySelectorAll('*')].filter(n=>{const r=n.getBoundingClientRect();return r.right>innerWidth+1 && r.width>0 && !n.closest('.react-flow')}).slice(0,12).map(n=>({tag:n.tagName,cls:n.className,width:n.getBoundingClientRect().width}))})""")
+        assert overflow['scroll'] <= overflow['width'] + 1, f"Mobile graph overflows horizontally: {overflow}"
         await page.set_viewport_size({"width":1440,"height":1000})
         await page.get_by_test_id("nav-repositories").click()
         page.once("dialog", accept_dialog)
