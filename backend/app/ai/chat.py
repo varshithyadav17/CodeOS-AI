@@ -2,11 +2,13 @@
 from __future__ import annotations
 import asyncio
 import logging
+import math
 import time
 from dataclasses import dataclass
 from fastapi import HTTPException
 from google import genai
 from google.genai import types
+from ..embedding_limits import EmbeddingDeferred
 from ..config import settings
 from ..models import Conversation, Message
 from ..prompts import CHAT_SYSTEM_PROMPT
@@ -225,6 +227,9 @@ class ChatService:
                 answer = "I could not find enough indexed evidence for this question. Try naming a file or symbol, or check the repository's indexing status."
         except HTTPException:
             raise
+        except EmbeddingDeferred as exc:
+            raise HTTPException(503, "Google embedding capacity is temporarily unavailable. Your repository is saved; please retry later.",
+                headers={"Retry-After": str(math.ceil(exc.retry_after))}) from exc
         except Exception:
             logger.exception("chat_generation_failed repo_id=%s conversation_id=%s", repo_id, conv.id)
             raise HTTPException(503, "AI retrieval or generation is unavailable. Check service health, Gemini quota, and model configuration, then retry.")

@@ -123,3 +123,25 @@ def test_password_hash_and_jwt_verification(monkeypatch):
     import jwt
     wrong = jwt.encode({"sub":"id"},settings.JWT_SECRET,algorithm="HS256")
     with pytest.raises(jwt.PyJWTError): decode_token(wrong)
+
+
+@pytest.mark.parametrize('filename,source,symbol', [
+    ('main.go', 'package main\nfunc greet() string { return "hello" }\n', 'greet'),
+    ('main.rs', 'pub fn greet() -> i32 { 1 }\n', 'greet'),
+    ('Main.java', 'class Main { public int greet() { return 1; } }\n', 'greet'),
+    ('main.ts', 'export const greet = (name: string) => name;\n', 'greet'),
+    ('main.cpp', 'int greet() { return 1; }\n', 'greet'),
+    ('main.c', 'char *greet(void) { return 0; }\n', 'greet'),
+    ('main.rb', 'class Example\n  def greet\n    1\n  end\nend\n', 'greet'),
+    ('Main.cs', 'class Main { public int greet() { return 1; } }\n', 'greet'),
+    ('main.php', '<?php function greet() { return 1; }\n', 'greet'),
+])
+def test_multilanguage_parser_retains_real_symbols_and_source_lines(tmp_path, filename, source, symbol):
+    (tmp_path / filename).write_text(source)
+    parsed = ParserService().parse_repo(tmp_path)
+    assert len(parsed) == 1 and not parsed[0].parse_error
+    assert any(s.name == symbol for s in parsed[0].symbols)
+    chunks = EmbeddingService().build_chunks('multilanguage', parsed)
+    for number, line in enumerate(source.splitlines(), 1):
+        if line.strip():
+            assert any(c.start_line <= number <= c.end_line and line in c.text for c in chunks)

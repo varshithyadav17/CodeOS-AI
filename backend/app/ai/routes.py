@@ -3,12 +3,14 @@ from __future__ import annotations
 import io
 import asyncio
 import logging
+import math
 import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from ..auth.auth import get_current_user
+from ..embedding_limits import EmbeddingDeferred
 from ..config import settings
 from ..database import (
     get_repo_repo, get_graph_service, get_vector_store,
@@ -164,7 +166,7 @@ async def _auth_repo(repo_id: str, user: User):
     repo = await get_repo_repo().get(repo_id)
     if not repo or repo.user_id != user.id:
         raise HTTPException(status_code=404, detail="Repository not found")
-    if repo.status != "ready":
+    if repo.status not in {"ready", "embedding", "waiting_embeddings"} or not repo.file_manifest:
         raise HTTPException(status_code=400, detail=f"Repository not ready (status={repo.status})")
     return repo
 
@@ -254,6 +256,9 @@ async def generate_doc(repo_id: str, body: GenIn, user: User = Depends(get_curre
             return await _doc_svc().generate(repo, body.doc_type, user.id)
     except HTTPException:
         raise
+    except EmbeddingDeferred as exc:
+        raise HTTPException(503, "Google embedding capacity is temporarily unavailable. Your repository is saved; please retry later.",
+            headers={"Retry-After": str(math.ceil(exc.retry_after))}) from exc
     except TimeoutError:
         raise HTTPException(503, "Documentation generation took too long. Please retry.")
     except RuntimeError:

@@ -1,3 +1,4 @@
+import { hasParsedWorkspace, repositoryStatusLabel } from "../../lib/repositoryStatus";
 import { Link } from "react-router-dom";
 import GitBranchIcon from "../../assets/icons/git-branch.svg?react";
 import FolderOpenIcon from "../../assets/icons/folder-open.svg?react";
@@ -9,6 +10,7 @@ const statusColor = {
   queued: "text-white/50",
   cloning: "text-[#FFB300]",
   parsing: "text-[#FFB300]",
+  waiting_embeddings: "text-[#3FC8E8]",
   embedding: "text-[#FFB300]",
   ready: "text-[#34C759]",
   failed: "text-[#FF3B30]",
@@ -28,7 +30,7 @@ export default function RepositoryCard({ r, onReingest, onDelete }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <Link to={`/repositories/${r.id}`} data-testid={`repo-open-${r.id}`} className="text-white font-medium text-sm hover:text-[#3FC8E8] transition-colors truncate focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8] rounded-sm">{r.name}</Link>
-            <span className={`text-[10px] uppercase tracking-[0.18em] mono ${statusColor[r.status] || "text-white/50"}`}>{r.status}</span>
+            <span className={`text-[10px] uppercase tracking-[0.18em] mono ${statusColor[r.status] || "text-white/50"}`}>{repositoryStatusLabel(r.status)}</span>
             {r.branch && <span className="text-[10px] mono text-white/40 flex items-center gap-1"><GitBranchIcon width={10} height={10} aria-hidden="true" />{r.branch}</span>}
           </div>
           {r.source_url && <div className="text-[11px] mono text-white/40 mt-0.5 truncate">{r.source_url}</div>}
@@ -38,7 +40,7 @@ export default function RepositoryCard({ r, onReingest, onDelete }) {
             </div>
           )}
           {r.message && <div className="text-[11px] text-white/40 mt-1">{r.message}</div>}
-          {r.status === "ready" && (
+          {hasParsedWorkspace(r) && (
             <div className="flex flex-wrap gap-3 mt-2 text-[11px] mono text-white/50">
               <span>{r.stats?.files || 0} files</span>
               <span>{r.stats?.loc || 0} loc</span>

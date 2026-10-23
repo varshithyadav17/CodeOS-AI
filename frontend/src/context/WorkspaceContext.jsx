@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { hasParsedWorkspace } from "../lib/repositoryStatus";
 
 const WorkspaceContext = createContext(null);
 
@@ -21,6 +22,7 @@ export function WorkspaceProvider({ children }) {
   const [reposLoading, setReposLoading] = useState(true);
   const [reposError, setReposError] = useState(null);
   const repoInFlight = useRef(new Set()); // repo ids with an optimistic action pending
+  const graphLoadedFor = useRef(null);
 
   const loadRepositories = useCallback(async () => {
     const r = await api.get("/repos");
@@ -105,6 +107,7 @@ export function WorkspaceProvider({ children }) {
     repoInFlight.current.add(id);
     try {
       await api.post(`/repos/${id}/reingest`);
+      graphLoadedFor.current = null;
       setRepositories((rs) => rs.map((r) => r.id === id ? { ...r, status: "queued", progress: 0, message: "Analysis queued" } : r));
       setRepo((r) => r?.id === id ? { ...r, status: "queued", progress: 0, message: "Analysis queued" } : r);
       await loadRepositories();
@@ -141,7 +144,7 @@ export function WorkspaceProvider({ children }) {
     const r = await api.get(`/repos/${id}`);
     if (repoIdRef.current !== id) return r.data;
     setRepo(r.data);
-    if (r.data.status === "ready") {
+    if (hasParsedWorkspace(r.data)) {
       const g = await api.get(`/repos/${id}/graph?limit=120`);
       let allFiles = [], offset = 0;
       while (true) {
@@ -154,6 +157,7 @@ export function WorkspaceProvider({ children }) {
       if (repoIdRef.current === id) {
         setGraph(g.data);
         setFiles(allFiles);
+        graphLoadedFor.current = id;
       }
     }
     return r.data;
@@ -175,6 +179,7 @@ export function WorkspaceProvider({ children }) {
   }, []);
 
   const loadRepo = useCallback(async (id) => {
+    graphLoadedFor.current = null;
     repoIdRef.current = id;
     setRepo(null);
     setGraph({ nodes: [], edges: [] });
@@ -186,7 +191,8 @@ export function WorkspaceProvider({ children }) {
     setRepoLoadError(null);
     resetSelection();
     try {
-      await refreshRepo(id);
+      const loaded = await refreshRepo(id);
+      if (repoIdRef.current === id && loaded.status !== "ready") setActiveTab("graph");
     } catch (e) {
       if (repoIdRef.current === id) setRepoLoadError(e?.response?.data?.detail || "Failed to load repository");
     } finally {
@@ -212,7 +218,8 @@ export function WorkspaceProvider({ children }) {
       const r = await api.get(`/repos/${id}/status`);
       if (repoIdRef.current !== id) return;
       setRepo((prev) => (prev?.id === id ? { ...prev, ...r.data } : prev));
-      if (["ready", "failed", "delete_failed"].includes(r.data.status)) {
+      if (["ready", "failed", "delete_failed"].includes(r.data.status)
+          || (hasParsedWorkspace(r.data) && graphLoadedFor.current !== id)) {
         await refreshRepo(id);
       }
     } catch (e) {

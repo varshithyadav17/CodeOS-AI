@@ -29,7 +29,15 @@ auth_routes.verify_google_credential = json.loads
 
 db.get_graph_service = lru_cache()(lambda: TestGraph())
 db.get_storage = lru_cache()(lambda: TestStorage())
-db.get_vector_store = lru_cache()(lambda: QdrantVectorStore(client=AsyncQdrantClient(location=":memory:"), embedder=TestEmbedder()))
+class BrowserEmbedder(TestEmbedder):
+    async def embed(self, texts, query=False):
+        if any("CODEOS_QUOTA_TEST" in text for text in texts):
+            from app.embedding_limits import EmbeddingDeferred
+            raise EmbeddingDeferred(3600)
+        return await super().embed(texts, query=query)
+
+
+db.get_vector_store = lru_cache()(lambda: QdrantVectorStore(client=AsyncQdrantClient(location=":memory:"), embedder=BrowserEmbedder()))
 ai_routes.get_graph_service = db.get_graph_service
 ai_routes.get_vector_store = db.get_vector_store
 

@@ -32,7 +32,7 @@ Qdrant holds code text, source metadata and dense embeddings. Named vectors carr
 3. ZIP input is streamed to an isolated temporary file, checked and stored unchanged in S3. A GitHub worker shallow-clones the selected branch, creates a ZIP without `.git` or symlinks, and stores it in S3.
 4. Use the same archive-processing path for ZIPs, GitHub snapshots and retries. Verify SHA-256, reject traversal, links, encryption, duplicate paths, excessive expansion and file-count limits, then extract into a temporary workspace.
 5. Normalize a single wrapper directory. Inventory supported files, parse ASTs, resolve structural relationships, and build overlapping bounded chunks across all included source lines. Common credential files, generated directories, oversized files and minified lines are excluded from indexing and preview.
-6. Set the repository unavailable for questions while indexing. Clear the repository's prior graph/vector namespace and write stable IDs in bounded batches.
+6. Keep AI questions unavailable until indexing completes. Save the verified graph and file manifest first. Index bounded batches with durable offsets and stable IDs; a matching archive/model/chunk fingerprint resumes existing work, including a Qdrant write interrupted before its offset was committed.
 7. Verify actual graph-node, graph-edge and vector counts before marking the repository ready. Persist file metadata and language counts.
 8. Remove temporary clone, archive and extraction paths on success, failure, timeout or cancellation. Source-code file previews subsequently read the original S3 archive inside their own temporary context.
 
@@ -46,7 +46,7 @@ A PostgreSQL advisory lock stays held across a repository's external writes. Hea
 
 Deletion marks the repository deleting, cancels pending work, requests cancellation of running work, and queues a cleanup job. Cleanup removes Neo4j data, Qdrant payloads/vectors and all versions of the exact S3 archive key. Each completed stage is recorded so a failed stage can retry. PostgreSQL is deleted last; foreign keys cascade conversations/messages, jobs, reviews, documentation, memories and repository activity. A store failure produces retry/deletion-failed state rather than falsely reporting immediate completion.
 
-Failed ingestion attempts remove partial indexes. When that cleanup cannot finish, a separate persisted cleanup job retries it; the original archive remains available for a future ingestion retry. After the configured retry limit, the failed job remains inspectable and the user can retry re-ingestion or deletion.
+Embedding quota and temporary embedding-provider failures preserve the verified graph, file manifest, archive, and completed Qdrant batches. The durable job enters `retry` and the repository becomes `waiting_embeddings`; source, graph, and architecture remain available, while AI features wait for complete indexing. Other ingestion failures remove partial indexes. When that cleanup cannot finish, a separate persisted cleanup job retries it; the original archive remains available for a future ingestion retry. After the configured retry limit, the failed job remains inspectable and the user can retry re-ingestion or deletion.
 
 ## Hybrid retrieval
 
@@ -78,3 +78,11 @@ Empty evidence produces an insufficient-evidence response. Provider failures ret
 Google credentials are validated server-side and matched to a unique permanent subject. A ten-minute browser nonce binds sign-in to its originating browser. Linking to an existing password account requires that password. The schema change is an additive Alembic migration.
 
 Documentation drafts are generated from bounded repository evidence and saved in PostgreSQL, with repository-row locking during the final save to coordinate concurrent drafts and deletion. The workspace supports ten types, regeneration, Markdown download and ZIP export. AI drafts should be reviewed before publishing.
+
+### Free-tier embedding recovery
+
+The single API process shares an embedding budget across indexing and queries: by default five requests, forty inputs, and 8,000 estimated tokens per minute. Batches contain at most eight inputs and about 4,000 estimated tokens. These conservative settings are configurable; they do not guarantee a project's provider quota. A 429 schedules durable exponential backoff, honoring explicit provider retry hints and explicit daily quota resets. Hidden SDK retries are disabled. Quota deferrals do not exhaust the ordinary failure-attempt limit. A long import yields before its job deadline and continues from its saved offset.
+
+On worker startup, the active failed ingestion jobs left by the previous embedding implementation (archived source, embedding-stage progress, SDK ClientError) receive one marked recovery attempt. A locked compare-and-set prevents recovery from replacing newer user work. No credentials or user sessions are required for this repair.
+
+The graph workspace offers file clusters and directional dependency layers, symbol/path search, relationship filters, one-hop focus, and source navigation. Cyclic components remain together in the dependency layout. Page limits remain explicit: search and connection counts apply to the current graph page; architecture views provide repository analysis within their documented limits.

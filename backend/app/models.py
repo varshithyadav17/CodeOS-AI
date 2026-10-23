@@ -38,6 +38,7 @@ class RepoStatus(str, Enum):
     CLONING = "cloning"
     PARSING = "parsing"
     EMBEDDING = "embedding"
+    WAITING_EMBEDDINGS = "waiting_embeddings"
     READY = "ready"
     FAILED = "failed"
     DELETING = "deleting"
@@ -50,6 +51,7 @@ class RepoStats(BaseModel):
     nodes: int = 0
     edges: int = 0
     chunks: int = 0
+    chunks_total: int = 0
 
 
 class Repository(BaseModel):
