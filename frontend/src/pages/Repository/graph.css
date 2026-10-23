@@ -66,3 +66,5 @@
 @media (max-width: 1000px) { .code-map-workspace { grid-template-columns: minmax(0, 1fr) 210px; } .code-map-heading, .code-map-toolbar { padding-inline: 16px; } .code-map-counter { font-size: 9px; } .code-map-page-hint { display: none; } }
 @media (max-width: 700px) { .code-map-heading { align-items: flex-start; flex-direction: column; } .code-map-workspace { display: flex; flex-direction: column; } .code-map-canvas { height: 470px; } .code-map-inspector { border-left: 0; border-top: 1px solid var(--map-border); max-height: 380px; } .code-map-welcome { padding-top: 0; } .code-map-radar, .code-map-help { display: none; } .code-map-inspector h3 { font-size: 17px; } .code-map-legend { right: 145px; bottom: 13px; gap: 6px; } .code-map-footer { padding-inline: 12px; font-size: 9px; } }
 @media (prefers-reduced-motion: reduce) { .code-map *, .code-map-node { transition: none !important; } }
+
+.code-map .react-flow__background { background: transparent; }

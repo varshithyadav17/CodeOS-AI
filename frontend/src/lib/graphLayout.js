@@ -31,12 +31,26 @@ export function dependencyPositions(nodes, edges) {
     rank[next] = Math.max(rank[next], rank[queue[i]] + 1);
     if (--indegree[next] === 0) queue.push(next);
   }
-  const rows = new Map(), positions = {};
+  const incident = new Set();
+  for (const [id, targets] of links) for (const target of targets) { incident.add(id); incident.add(target); }
+  const levels = new Map(), positions = {}, isolated = [];
   for (const component of queue) for (const id of components[component]) {
-    const column = rank[component], row = rows.get(column) || 0;
-    positions[id] = { x: column * 760 + (row % 2) * 250, y: Math.floor(row / 2) * 130 };
-    rows.set(column, row + 1);
+    if (!incident.has(id)) { isolated.push(id); continue; }
+    const level = rank[component];
+    if (!levels.has(level)) levels.set(level, []);
+    levels.get(level).push(id);
   }
+  const maxRows = Math.max(0, ...[...levels.values()].map(group => group.length));
+  for (const [level, group] of levels) group.forEach((id, row) => {
+    // A single column per dependency rank keeps peer nodes out of each
+    // other's horizontal edge paths. Center narrower ranks on their peers.
+    positions[id] = { x: level * 380, y: (row + (maxRows - group.length) / 2) * 130 };
+  });
+  // Independent symbols have no direction to preserve: pack them below the
+  // connected graph instead of creating one very tall dependency column.
+  isolated.forEach((id, i) => {
+    positions[id] = { x: (i % 5) * 250, y: (maxRows ? maxRows * 130 + 120 : 0) + Math.floor(i / 5) * 130 };
+  });
   return positions;
 }
 export function filePositions(nodes) {

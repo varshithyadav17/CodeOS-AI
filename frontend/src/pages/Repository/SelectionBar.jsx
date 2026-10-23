@@ -25,9 +25,9 @@ export default function SelectionBar() {
       data-testid="selection-bar"
       role="toolbar"
       aria-label="Selected item navigation"
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 glass-panel border border-[#3FC8E8]/30 rounded-xl px-3 py-2 flex items-center gap-2 shadow-[0_8px_30px_-4px_rgba(63,200,232,0.3)] animate-in slide-in-from-bottom duration-200"
+      className="w-fit max-w-full glass-panel border border-[#3FC8E8]/30 rounded-xl px-3 py-2 flex flex-wrap items-center gap-2"
     >
-      <span className="text-[10px] mono text-[#3FC8E8] max-w-[180px] truncate" title={label}>{label}</span>
+      <span className="text-[10px] mono text-[#3FC8E8] max-w-[140px] truncate" title={label}>{label}</span>
       <div className="h-3.5 w-px bg-white/10" />
       {JUMPS.map(({ tab, icon: Icon, label: lbl }) => (
         <button
