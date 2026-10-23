@@ -1,0 +1,27 @@
+name: Verify deployed production UI
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/production-ui-verification]
+permissions:
+  contents: read
+jobs:
+  production-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+      - run: python -m pip install playwright==1.64.0
+      - run: python scripts/verify_production_ui.py
+      - name: Save production UI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-ui-verification
+          path: qa/
+          retention-days: 7
