@@ -99,7 +99,7 @@ jobs:
           print('PASS two 512 MB containers migrated PostgreSQL and started on PORT')
           PY
       - run: npm run lint --prefix frontend
-      - run: node --test frontend/src/lib/graphLayout.test.js
+      - run: node --test frontend/src/lib/*.test.js
       - name: Verify runner Chrome
         run: google-chrome --version
       - run: mkdir -p qa && python scripts/verify_browser.py

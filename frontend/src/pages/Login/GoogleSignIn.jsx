@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { googleFailure } from "../../lib/googleRecovery";
 import { prepareGoogleSignIn } from "../../lib/googleIdentity";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -16,9 +17,27 @@ export default function GoogleSignIn({ busy, onSignedIn }) {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const inFlight = useRef(false);
+  const [retryAt, setRetryAt] = useState(0);
+  const [now, setNow] = useState(Date.now);
+  const retryRemaining = Math.max(0, Math.ceil((retryAt - now) / 1000));
+  const showFailure = useCallback((err) => {
+    const failure = googleFailure(err);
+    setError(failure.message);
+    setNow(Date.now());
+    setRetryAt(failure.retryAfter ? Date.now() + failure.retryAfter * 1000 : 0);
+  }, []);
+  useEffect(() => {
+    if (!retryAt) return;
+    const timer = setInterval(() => {
+      const tick = Date.now();
+      setNow(tick);
+      if (tick >= retryAt) setRetryAt(0);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [retryAt]);
 
   handlerRef.current = async (token, linkPassword) => {
-    if (busy || inFlight.current) return;
+    if (busy || inFlight.current || retryRemaining) return;
     if (!token) { setError("Google did not return a credential. Please try again."); return; }
     inFlight.current = true; setSubmitting(true); setError("");
     try {
@@ -27,7 +46,7 @@ export default function GoogleSignIn({ busy, onSignedIn }) {
     } catch (err) {
       const detail = err?.response?.data?.detail;
       if (detail?.code === "google_link_required") setCredential(token);
-      else setError(typeof detail === "string" ? detail : "Google sign-in failed. Please try again.");
+      else showFailure(err);
     } finally { inFlight.current = false; setSubmitting(false); }
   };
 
@@ -44,12 +63,13 @@ export default function GoogleSignIn({ busy, onSignedIn }) {
         width: Math.min(340, Math.floor(buttonRef.current.clientWidth)) });
       setState("ready");
     }).catch((err) => {
-      if (active) { setState("error"); setError(err.message || "Google sign-in is unavailable."); }
+      if (active) { setState("error"); showFailure(err); }
     });
     return () => { active = false; };
-  }, [attempt]);
+  }, [attempt, showFailure]);
 
   const refresh = () => {
+    if (retryRemaining || submitting) return;
     setCredential(null); setPassword(""); setError(""); setState("loading");
     setAttempt((value) => value + 1);
   };
@@ -61,9 +81,9 @@ export default function GoogleSignIn({ busy, onSignedIn }) {
       <img src={googleIcon} alt="" width="18" height="18" /> Continue with Google
     </button>}
     <div ref={buttonRef} data-testid="google-official-button"
-      inert={busy || submitting || credential ? "" : undefined}
+      inert={busy || submitting || credential || retryRemaining ? "" : undefined}
       className={state === "disabled" || state === "error" ? "hidden" : "min-h-10 flex justify-center w-full"} />
-    {state === "loading" && <p role="status" className="text-xs text-white/50 text-center">Loading Google sign-in…</p>}
+    {state === "loading" && <p role="status" className="text-xs text-white/50 text-center">Connecting to Google sign-in…</p>}
     {state === "disabled" && <p id="google-availability" className="text-xs text-white/50 text-center">Google sign-in is not available yet. You can sign in with email below.</p>}
     {submitting && <p role="status" className="text-xs text-white/60">Signing in…</p>}
     {credential && <form data-testid="google-link-form" className="space-y-3 rounded-lg border border-white/15 p-3"
@@ -73,10 +93,10 @@ export default function GoogleSignIn({ busy, onSignedIn }) {
       <Input id="google-link-password" type="password" autoComplete="current-password" required maxLength={128}
         value={password} onChange={(event) => setPassword(event.target.value)} />
       <Button type="submit" disabled={busy || submitting}>Connect Google and sign in</Button>
-      <button type="button" onClick={refresh} disabled={submitting} className="text-xs text-white/60 ml-2">Cancel</button>
+      <button type="button" onClick={refresh} disabled={submitting || retryRemaining > 0} data-testid="google-link-cancel" className="text-xs text-white/60 ml-2">Cancel</button>
     </form>}
     {error && <p id="google-availability" role="alert" className="text-xs text-red-300">{error}</p>}
-    {(error || state === "error") && <button type="button" onClick={refresh} disabled={submitting}
-      className="text-xs text-[#3FC8E8] underline">Refresh Google sign-in</button>}
+    {(error || state === "error") && <button type="button" onClick={refresh} disabled={submitting || retryRemaining > 0} data-testid="google-refresh"
+      className="text-xs text-[#3FC8E8] underline disabled:opacity-60 disabled:cursor-wait">{retryRemaining ? `Try again in ${retryRemaining}s` : "Refresh Google sign-in"}</button>}
   </div>;
 }

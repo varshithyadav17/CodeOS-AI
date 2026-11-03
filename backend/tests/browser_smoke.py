@@ -333,6 +333,40 @@ async def main():
         await expect(blocked.get_by_test_id("google-unavailable-button")).to_be_disabled()
         await blocked.close()
         checks.append("Blocked Google script shows recovery while email sign-in remains usable")
+        recovering = await browser.new_page()
+        recovering.on("pageerror", lambda error: errors.append(str(error)))
+        await recovering.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
+        calls = 0
+        async def once_limited(route):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                await route.fulfill(status=429, headers={"Retry-After": "1"}, content_type="application/json", body='{"detail":"Too many requests"}')
+            else:
+                await route.continue_()
+        await recovering.route("**/api/auth/google/challenge", once_limited)
+        await recovering.goto("http://127.0.0.1:5173/login")
+        await expect(recovering.get_by_test_id("google-test-button")).to_be_visible(timeout=15000)
+        assert calls == 2
+        await expect(recovering.get_by_role("alert")).not_to_be_visible()
+        await recovering.close()
+        checks.append("Google setup recovers automatically after a short HTTP 429 without a reload")
+        throttled = await browser.new_page()
+        throttled.on("pageerror", lambda error: errors.append(str(error)))
+        await throttled.clock.install()
+        await throttled.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
+        await throttled.route("**/api/auth/google/challenge", lambda route: route.fulfill(status=429, headers={"Retry-After": "30"}, content_type="application/json", body='{"detail":"Too many requests"}'))
+        await throttled.goto("http://127.0.0.1:5173/login")
+        await expect(throttled.get_by_role("alert")).to_contain_text("temporarily rate-limited")
+        await expect(throttled.get_by_test_id("google-refresh")).to_be_disabled()
+        await expect(throttled.get_by_test_id("auth-submit-button")).to_be_enabled()
+        await throttled.clock.fast_forward(31000)
+        await expect(throttled.get_by_test_id("google-refresh")).to_be_enabled()
+        await throttled.unroute("**/api/auth/google/challenge")
+        await throttled.get_by_test_id("google-refresh").click()
+        await expect(throttled.get_by_test_id("google-test-button")).to_be_visible(timeout=15000)
+        await throttled.close()
+        checks.append("Google rate-limit countdown respects Retry-After, prevents repeated refreshes and preserves email sign-in")
         unconfigured = await browser.new_page()
         await unconfigured.route("**/api/auth/google/challenge", lambda route: route.fulfill(content_type="application/json", body='{"enabled":false}'))
         await unconfigured.goto("http://127.0.0.1:5173/login")
