@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { requestGoogleChallenge } from "./googleRecovery";
 
 let libraryPromise;
 let preparation;
@@ -31,7 +32,7 @@ function loadLibrary() {
 // a fresh nonce and install the callback for the current component.
 export function prepareGoogleSignIn() {
   if (!preparation) {
-    preparation = api.get("/auth/google/challenge", { timeout: 15000 }).then(async ({ data }) => {
+    preparation = requestGoogleChallenge(() => api.get("/auth/google/challenge", { timeout: 60000 })).then(async ({ data }) => {
       if (!data.enabled) return data;
       return { ...data, identity: await loadLibrary() };
     }).finally(() => { preparation = null; });
