@@ -1,26 +1,12 @@
 import BrainIcon from "../../assets/icons/brain.svg?react";
-import { SkeletonGrid } from "../../components/Skeleton";
+import { SkeletonList } from "../../components/Skeleton";
 import { EmptyState, ErrorState } from "../../components/EmptyState";
 import MemoryCard from "./MemoryCard";
 
-/** Loading/error/empty states + the memory grid itself. */
-export default function MemoryList({ items, loading, error, onRetry, onSelect, onNew }) {
+export default function MemoryList({ items, repos, loading, error, onRetry, onSelect, onUpdate, updating, onNew, canCreate, filtered, onReset }) {
   if (error) return <ErrorState message={error} onRetry={onRetry} testId="memory-error" />;
-  if (loading) return <SkeletonGrid cols={3} count={6} cardClassName="h-24" />;
-  if (items.length === 0) {
-    return (
-      <EmptyState
-        icon={BrainIcon}
-        title="No memories yet."
-        subtitle="Run a code review to auto-populate this board, or add a note manually."
-        action={{ label: "New memory", onClick: onNew }}
-        testId="memory-empty"
-      />
-    );
-  }
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="memory-grid">
-      {items.map((m) => <MemoryCard key={m.id} m={m} onClick={() => !String(m.id).startsWith("optimistic-") && onSelect(m)} />)}
-    </div>
-  );
+  if (loading) return <SkeletonList rows={4} rowClassName="h-28" />;
+  if (!items.length) return <EmptyState icon={BrainIcon} title={filtered ? "No matching saved items" : "No saved context yet"} subtitle={filtered ? "Try another search or clear the filters for this repository." : "Save findings from a code review, or add a decision or note you want to revisit."} action={filtered ? { label: "Clear filters", onClick: onReset } : canCreate ? { label: "Add your first memory", onClick: onNew } : undefined} testId="memory-empty" />;
+  const names = new Map(repos.map(repo => [repo.id, repo.name]));
+  return <ul className="memory-list" data-testid="memory-grid">{items.map(memory => <MemoryCard key={memory.id} m={memory} repoName={names.get(memory.repo_id)} onClick={() => onSelect(memory)} onUpdate={onUpdate} updating={updating} />)}</ul>;
 }

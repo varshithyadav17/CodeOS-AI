@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import RepositoryUpload from "./RepositoryUpload";
 import RepositoryList from "./RepositoryList";
+import "../workspace.css";
 
 export default function Repositories() {
   const { repositories, reposLoading, reposError, loadRepositories, refreshRepositories, deleteRepo, reingestRepo } = useWorkspace();
@@ -38,12 +39,10 @@ export default function Repositories() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6" data-testid="repos-root">
-      <div>
-        <div className="text-[10px] uppercase tracking-[0.2em] mono text-white/40">{"// repositories"}</div>
-        <h1 className="text-3xl font-semibold tracking-tighter mt-1" style={{ fontFamily: "Chivo" }}>Repositories</h1>
-        <p className="text-sm text-white/50 mt-2">Connect a GitHub repo or upload a ZIP. Each one is parsed with tree-sitter, indexed into a knowledge graph, and made queryable.</p>
-      </div>
+    <div className="workspace-page space-y-6" data-testid="repos-root">
+      <header className="workspace-page-heading"><div><h1>Repositories</h1>
+        <p>Bring in a codebase, then explore its files, relationships, and saved findings.</p>
+      </div></header>
 
       <RepositoryUpload />
 

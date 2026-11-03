@@ -1,55 +1,49 @@
+import { useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import XIcon from "../../assets/icons/x.svg?react";
 import ExternalLinkIcon from "../../assets/icons/external-link.svg?react";
-import { useNavigate } from "react-router-dom";
+import { useFetch } from "../../hooks/useFetch";
+import { memoryChatDraft } from "../../lib/engineeringMemory";
 
-/** Right-side drawer showing a single memory's full detail: description,
- * file/symbol, tags, status toggle, and delete. */
-export default function MemoryDetail({ selected, onClose, onUpdate, onDelete }) {
+export default function MemoryDetail({ selected, repo, onClose, onUpdate, updating, onDelete }) {
   const navigate = useNavigate();
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex justify-end animate-in fade-in duration-150" onClick={onClose} data-testid="memory-drawer">
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="memory-drawer-title"
-        className="w-full max-w-md glass-panel-soft border-l border-white/10 h-full overflow-auto p-5 animate-in slide-in-from-right duration-200"
-      >
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="text-[10px] mono uppercase tracking-[0.18em] text-white/40">{selected.category}</div>
-            <h2 id="memory-drawer-title" className="text-lg tracking-tight font-medium mt-1" style={{ fontFamily: "Chivo" }}>{selected.title}</h2>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="text-white/40 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8] rounded-sm"><XIcon width={16} height={16} aria-hidden="true" /></button>
-        </div>
-        <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed">{selected.description || "No description."}</p>
-        {selected.file_path && <div className="text-[11px] mono text-white/50 mt-3">{selected.file_path}{selected.symbol ? ` · ${selected.symbol}` : ""}</div>}
-        {(selected.file_path || selected.symbol) && (
-          <button
-            data-testid="memory-open-workspace"
-            onClick={() => {
-              const params = new URLSearchParams();
-              if (selected.file_path) params.set("file", selected.file_path);
-              if (selected.symbol) params.set("symbol", selected.symbol);
-              navigate(`/repositories/${selected.repo_id}?${params.toString()}`);
-            }}
-            className="mt-3 text-xs mono flex items-center gap-1.5 text-[#3FC8E8] hover:text-white border border-[#3FC8E8]/40 hover:bg-[#3FC8E8]/10 px-2.5 py-1.5 rounded-sm w-fit transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8]"
-          >
-            <ExternalLinkIcon width={12} height={12} aria-hidden="true" /> Open in workspace
-          </button>
-        )}
-        {selected.tags?.length > 0 && <div className="flex gap-1 flex-wrap mt-3">{selected.tags.map((t) => <span key={t} className="text-[10px] mono bg-white/5 px-1.5 py-0.5 rounded-sm text-white/60">{t}</span>)}</div>}
-        <div className="mt-5 space-y-2">
-          <div className="text-[10px] mono uppercase tracking-[0.18em] text-white/40">Status</div>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Change status">
-            {["open", "in_progress", "resolved", "wont_fix"].map((s) => (
-              <button key={s} data-testid={`memory-status-${s}`} aria-pressed={selected.status === s} onClick={() => onUpdate(selected.id, { status: s })} className={`text-xs mono uppercase tracking-[0.16em] px-2 py-1 rounded-sm border transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8] ${selected.status === s ? "border-[#3FC8E8] text-[#3FC8E8]" : "border-white/10 text-white/60 hover:border-white/30"}`}>{s.replace("_", " ")}</button>
-            ))}
-          </div>
-        </div>
-        <button data-testid="memory-delete" onClick={() => onDelete(selected.id)} className="mt-6 text-xs text-[#FF3B30] hover:text-white border border-[#FF3B30]/40 hover:bg-[#FF3B30] px-3 py-1.5 rounded-sm transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#FF3B30]">Delete memory</button>
-      </div>
+  const dialogRef = useRef(null);
+  const review = useFetch(selected.review_id ? `/reviews/${selected.review_id}` : null);
+  const finding = review.data?.agents?.flatMap(agent => agent.findings || []).find(item => item.id === selected.finding_id);
+  const ready = repo?.status === "ready";
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    dialogRef.current?.querySelector("button")?.focus();
+    return () => previousFocus?.focus();
+  }, []);
+  const trapFocus = event => {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current.querySelectorAll("button:not(:disabled), a[href], select:not(:disabled)"));
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  };
+  const openWorkspace = () => {
+    const params = new URLSearchParams();
+    if (selected.file_path) params.set("file", selected.file_path);
+    if (selected.symbol) params.set("symbol", selected.symbol);
+    navigate(`/repositories/${selected.repo_id}${params.size ? `?${params}` : ""}`);
+  };
+  const statuses = { open: "Open", in_progress: "In progress", resolved: "Resolved", wont_fix: "Won’t fix" };
+  return <div className="memory-drawer-backdrop" onClick={onClose} data-testid="memory-drawer">
+    <div ref={dialogRef} onClick={event => event.stopPropagation()} onKeyDown={trapFocus} role="dialog" aria-modal="true" aria-labelledby="memory-drawer-title" className="memory-detail">
+      <header className="memory-detail-heading"><div><span className="workspace-eyebrow">{repo?.name || "Repository"} · {selected.category.replaceAll("_", " ")}</span><h2 id="memory-drawer-title">{selected.title}</h2></div><button onClick={onClose} aria-label="Close"><XIcon width={18} height={18} aria-hidden="true" /></button></header>
+      <div className="memory-detail-origin">{selected.source === "review" ? "Saved from a code review" : "Added by you"}{selected.updated_at && <> · Updated {new Date(selected.updated_at).toLocaleDateString()}</>}</div>
+      <p className="memory-detail-description">{selected.description || "No description added."}</p>
+      {selected.file_path && <div className="memory-detail-file"><span className="workspace-eyebrow">Source location</span><code>{selected.file_path}{finding?.line ? `:${finding.line}` : ""}{selected.symbol ? ` · ${selected.symbol}` : ""}</code></div>}
+      {review.loading && <p className="workspace-muted">Loading original review…</p>}
+      {finding?.recommendation && <section className="memory-recommendation" data-testid="memory-recommendation"><span className="workspace-eyebrow">From the original review</span><h3>Suggested next step</h3><p>{finding.recommendation}</p></section>}
+      {review.error && <p className="memory-inline-error">Original review unavailable. Your saved finding is still here. <button onClick={review.retry}>Retry</button></p>}
+      <div className="memory-detail-actions"><button data-testid="memory-open-workspace" onClick={openWorkspace} className="memory-secondary-button"><ExternalLinkIcon width={13} height={13} aria-hidden="true" />{selected.file_path ? "Open source" : "Open repository"}</button><button data-testid="memory-check-ai" disabled={!ready || review.loading} className="workspace-primary" onClick={() => navigate(`/repositories/${selected.repo_id}`, { state: { memoryContext: { repo_id: selected.repo_id, prompt: memoryChatDraft(selected, finding?.recommendation) } } })}>Check with AI →</button></div>
+      <p className="memory-draft-hint">{ready ? "Opens a chat draft for you to review and send. Saved findings are not automatically rechecked." : "The repository needs to finish indexing before you can check a finding with AI."}</p>
+      {selected.tags?.length > 0 && <div className="memory-detail-tags">{selected.tags.map(tag => <span key={tag}>{tag.replaceAll("_", " ")}</span>)}</div>}
+      <section className="memory-detail-status"><h3>Status</h3><div role="group" aria-label="Change status">{Object.entries(statuses).map(([status, label]) => <button key={status} data-testid={`memory-status-${status}`} aria-pressed={selected.status === status} disabled={updating} onClick={() => onUpdate(selected.id, { status })}>{label}</button>)}</div></section>
+      <button data-testid="memory-delete" onClick={() => onDelete(selected.id)} disabled={updating} className="memory-delete">Delete memory</button>
     </div>
-  );
+  </div>;
 }

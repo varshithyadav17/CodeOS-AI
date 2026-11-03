@@ -50,7 +50,7 @@ async def answer(self, message):
     if self.session_id.startswith("review-"):
         return json.dumps({"summary": "Checked the supplied source evidence.", "score": 85,
             "findings": [{"category": "testing", "title": "Add token tests", "description": "Cover token validation in auth.py.",
-                "severity": "low", "confidence": 0.8, "file_path": "auth.py", "line": 1}]})
+                "severity": "low", "confidence": 0.8, "file_path": "auth.py", "line": 1, "recommendation": "Test expired and malformed tokens before accepting a request."}]})
     return "Authentication is handled by `authenticate` in [auth.py:1-2]. `login` calls it in [api.py:3-4]."
 
 

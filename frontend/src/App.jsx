@@ -47,7 +47,7 @@ export default function App() {
         <Route path="/login" element={<AuthPage />} />
         <Route path="/auth/callback" element={<Navigate to="/login" replace />} />
         <Route element={<Protected><AppLayout /></Protected>}>
-          <Route path="/" element={<Navigate to="/repositories" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<ErrorBoundary label="Dashboard"><Suspense fallback={<PageFallback />}><Dashboard /></Suspense></ErrorBoundary>} />
           <Route path="/repositories" element={<ErrorBoundary label="Repositories"><Suspense fallback={<PageFallback />}><Repositories /></Suspense></ErrorBoundary>} />
           <Route path="/repositories/:id" element={<ErrorBoundary label="Repository workspace"><Suspense fallback={<PageFallback />}><RepoDetail /></Suspense></ErrorBoundary>} />

@@ -40,8 +40,8 @@ export default function Sidebar() {
   return (
     <aside className="w-16 md:w-60 shrink-0 glass-panel rounded-none border-y-0 border-l-0 flex flex-col relative z-10" data-testid="sidebar">
       <div className="px-2 md:px-5 py-5 border-b border-white/10">
-        <div className="flex items-center gap-2.5">
-          <img src={logoLight} alt="CodeOS AI" className="h-6 w-full object-contain md:w-auto" />
+        <div className="flex items-center justify-center md:justify-start gap-2.5">
+          <div className="w-6 md:w-auto overflow-hidden"><img src={logoLight} alt="CodeOS AI" className="h-6 w-auto max-w-none" /></div>
         </div>
         <div className="hidden md:block text-[10px] text-white/40 mono uppercase tracking-widest mt-1.5">AI for Software</div>
       </div>
@@ -60,7 +60,7 @@ export default function Sidebar() {
           <div className="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center text-[10px] border border-white/10">
             {(user?.name || user?.email || "U").slice(0, 1).toUpperCase()}
           </div>
-          <div className="truncate" data-testid="user-email">{user?.email}</div>
+          <div className="truncate" data-testid="user-name">{user?.name || "Your account"}</div>
         </div>
         <button
           data-testid="logout-button"

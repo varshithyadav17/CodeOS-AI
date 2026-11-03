@@ -3,6 +3,7 @@ import asyncio
 import io
 import json
 import os
+import re
 from pathlib import Path
 import zipfile
 from playwright.async_api import async_playwright, expect
@@ -31,6 +32,14 @@ async def accept_dialog(dialog):
     await dialog.accept()
 
 
+async def save_screenshot(page, variable):
+    if path := os.getenv(variable):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        await expect(page.locator("[data-sonner-toast]")).to_have_count(0, timeout=7000)
+        await page.get_by_role("heading", level=1).click()
+        await page.screenshot(path=path, full_page=True, animations="disabled")
+
+
 async def main():
     errors=[]
     checks=[]
@@ -46,8 +55,13 @@ async def main():
         await page.get_by_test_id("auth-email-input").fill("browser@example.com")
         await page.get_by_test_id("auth-password-input").fill("browser-password-123")
         await page.get_by_test_id("auth-submit-button").click()
-        await expect(page.get_by_test_id("repos-root")).to_be_visible(timeout=15000)
-        checks.append("Signup and authenticated navigation")
+        await expect(page.get_by_test_id("dashboard-root")).to_be_visible(timeout=15000)
+        await expect(page.get_by_role("heading", name="Dashboard", exact=True)).to_be_visible()
+        await expect(page.locator("main")).not_to_contain_text("browser@example.com")
+        await expect(page.locator("main")).not_to_contain_text("v1.0.0")
+        await page.get_by_test_id("nav-repositories").click()
+        await expect(page.get_by_role("heading", name="Repositories", exact=True)).to_be_visible()
+        checks.append("Signup opens Dashboard with clean page headings and no email/version banner")
         data=io.BytesIO()
         with zipfile.ZipFile(data,"w") as archive:
             archive.writestr("auth.py","def authenticate(token):\n    return token == 'allowed'\n")
@@ -66,7 +80,12 @@ async def main():
         await page.unroute("**/api/stats")
         await page.get_by_test_id("dashboard-error").get_by_role("button", name="Retry").click()
         await expect(page.get_by_test_id("stat-files")).to_contain_text("3")
-        checks.append("Dashboard uses actual repository counts and activity, with error recovery")
+        await save_screenshot(page, "CODEOS_QA_DASHBOARD_SCREENSHOT")
+        await page.set_viewport_size({"width":390,"height":844})
+        assert await page.locator("main").evaluate("el => el.scrollWidth <= el.clientWidth + 1"), "Mobile dashboard overflows horizontally"
+        await save_screenshot(page, "CODEOS_QA_DASHBOARD_MOBILE_SCREENSHOT")
+        await page.set_viewport_size({"width":1440,"height":1000})
+        checks.append("Dashboard uses actual repository counts and activity, recovers from errors, and fits mobile")
         await page.get_by_test_id("dashboard-add-repo").click()
         await page.get_by_role("link",name="browser-repo",exact=True).click()
         repo_id = page.url.rsplit("/", 1)[-1]
@@ -200,13 +219,40 @@ async def main():
         checks.append("Background code review completes with all six specialist reports")
         await page.get_by_test_id("review-import-memory").click()
         await expect(page.get_by_test_id("review-import-memory")).to_contain_text("Saved to Memory")
-        await page.get_by_test_id("nav-memory").click()
+        other_response = await page.request.post("http://127.0.0.1:5173/api/repos/upload", multipart={"file": {"name": "other-project.zip", "mimeType": "application/zip", "buffer": data.getvalue()}})
+        assert other_response.status == 202
+        other_repo = (await other_response.json())["id"]
+        other_note = await page.request.post("http://127.0.0.1:5173/api/memory", data={"repo_id": other_repo, "category": "decision", "title": "Different project decision", "description": "Keep this decision in its own project.", "severity": "info"})
+        assert other_note.status == 200
+        await page.get_by_test_id("workspace-memory").click()
+        await expect(page.get_by_test_id("memory-filter-repo")).to_have_value(repo_id)
         await expect(page.get_by_test_id("memory-grid").locator("button")).to_have_count(6,timeout=10000)
+        await page.get_by_test_id("memory-filter-repo").select_option("")
+        await expect(page.get_by_test_id("memory-grid").locator("button")).to_have_count(7)
+        await page.get_by_test_id("memory-filter-repo").select_option(other_repo)
+        await expect(page.get_by_test_id("memory-grid").locator("button")).to_have_count(1)
+        await expect(page.get_by_text("Different project decision", exact=True)).to_be_visible()
+        await page.get_by_test_id("memory-filter-repo").select_option(repo_id)
+        await expect(page.get_by_test_id("memory-grid").locator("button")).to_have_count(6)
+        await page.get_by_test_id("memory-grid").locator("button").first.click()
+        await expect(page.get_by_test_id("memory-recommendation")).to_contain_text("Test expired and malformed tokens")
+        if path := os.getenv("CODEOS_QA_MEMORY_DETAIL_SCREENSHOT"):
+            await page.get_by_role("dialog").screenshot(path=path, animations="disabled")
+        await page.keyboard.press("Escape")
+        await page.get_by_test_id("nav-dashboard").click()
+        await page.locator(".dashboard-findings-list a").first.click()
+        await expect(page.get_by_test_id("memory-drawer")).to_be_visible()
+        await expect(page.get_by_test_id("memory-filter-repo")).to_have_value(repo_id)
+        await expect(page.get_by_test_id("memory-recommendation")).to_be_visible()
+        await page.keyboard.press("Escape")
+        checks.append("Dashboard finding links open the matching project and memory detail")
+        checks.append("Repository memory scopes exclude other projects and retain original review recommendations")
         await page.get_by_test_id("memory-filter-category").select_option("architecture")
         await expect(page.get_by_test_id("memory-grid").locator("button")).to_have_count(1)
         await page.get_by_test_id("memory-filter-category").select_option("")
         checks.append("Review findings persist without duplicates and support category filters")
         await page.get_by_test_id("memory-new-button").click()
+        await expect(page.get_by_test_id("memory-create-repo")).to_have_value(repo_id)
         await page.get_by_test_id("memory-create-title").fill("Browser token note")
         await page.get_by_test_id("memory-create-description").fill("Follow up on token validation.")
         await page.get_by_test_id("memory-create-filepath").fill("auth.py")
@@ -215,6 +261,10 @@ async def main():
         await page.get_by_test_id("memory-search").fill("token")
         await page.get_by_test_id("memory-filter-category").select_option("note")
         await expect(page.get_by_test_id("memory-grid").locator("button")).to_have_count(1)
+        quick_status = page.get_by_test_id("memory-grid").locator("select")
+        await quick_status.select_option("in_progress")
+        await expect(quick_status).to_have_value("in_progress")
+        await expect(page.get_by_test_id("memory-stat-in_progress")).to_contain_text("1")
         await page.get_by_text("Browser token note",exact=True).click()
         await page.get_by_test_id("memory-status-resolved").click()
         await expect(page.get_by_test_id("memory-status-resolved")).to_have_attribute("aria-pressed","true")
@@ -224,12 +274,40 @@ async def main():
         await expect(page.get_by_test_id("memory-empty")).to_be_visible()
         await page.get_by_test_id("memory-filter-status").select_option("resolved")
         await expect(page.get_by_text("Browser token note",exact=True)).to_be_visible()
-        checks.append("Memory creation, combined search filters, status changes, and counts")
+        checks.append("Project-aware memory creation, combined filters, quick status changes, and counts")
+        await page.get_by_test_id("memory-filter-status").select_option("")
+        await page.get_by_test_id("memory-filter-category").select_option("")
+        await page.get_by_test_id("memory-search").fill("")
+        await expect(page.get_by_test_id("memory-grid").locator("button")).to_have_count(7)
+        await save_screenshot(page, "CODEOS_QA_MEMORY_SCREENSHOT")
+        await page.set_viewport_size({"width":390,"height":844})
+        assert await page.locator("main").evaluate("el => el.scrollWidth <= el.clientWidth + 1"), "Mobile memory overflows horizontally"
+        await save_screenshot(page, "CODEOS_QA_MEMORY_MOBILE_SCREENSHOT")
+        await page.set_viewport_size({"width":1440,"height":1000})
+        ai_requests = []
+        page.on("request", lambda request: ai_requests.append(request.url) if request.method == "POST" and "/chat" in request.url else None)
+        await page.get_by_text("Browser token note", exact=True).click()
+        await page.get_by_test_id("memory-check-ai").click()
+        await expect(page.get_by_test_id("chat-input")).to_have_value(re.compile("Browser token note"))
+        await expect(page.get_by_test_id("chat-input")).to_have_value(re.compile("Follow up on token validation"))
+        assert "Follow" not in page.url and "memoryContext" not in page.url
+        assert not ai_requests, "Checking a saved finding must only open a draft, not send automatically"
+        await page.get_by_test_id("workspace-memory").click()
+        await expect(page.get_by_test_id("memory-filter-repo")).to_have_value(repo_id)
+        checks.append("Memory fits mobile and Check with AI opens a project-bound draft without sending")
         await page.get_by_text("Browser token note",exact=True).click()
         await page.get_by_test_id("memory-open-workspace").click()
         await page.get_by_test_id("tab-files").click()
         await expect(page.get_by_test_id("file-content-pre")).to_contain_text("def authenticate",timeout=10000)
         checks.append("Saved finding opens its repository and source file")
+        deleted_other = await page.request.delete(f"http://127.0.0.1:5173/api/repos/{other_repo}")
+        assert deleted_other.status == 202
+        for _ in range(40):
+            if (await page.request.get(f"http://127.0.0.1:5173/api/repos/{other_repo}")).status == 404:
+                break
+            await asyncio.sleep(.1)
+        else:
+            raise AssertionError("Other project fixture was not deleted")
         await page.reload()
         await expect(page.get_by_test_id("repo-detail-root")).to_be_visible(timeout=15000)
         checks.append("HttpOnly session survives a page reload")
@@ -284,22 +362,22 @@ async def main():
         await page.get_by_test_id("auth-email-input").fill("browser@example.com")
         await page.get_by_test_id("auth-password-input").fill("browser-password-123")
         await page.get_by_test_id("auth-submit-button").click()
-        await expect(page.get_by_test_id("repos-empty")).to_be_visible(timeout=15000)
-        checks.append("Existing account signs back in after logout")
+        await expect(page.get_by_test_id("dashboard-root")).to_be_visible(timeout=15000)
+        checks.append("Existing account signs back into Dashboard after logout")
         await page.route("**/api/auth/logout", lambda route: route.fulfill(status=503, content_type="application/json", body='{"detail":"Temporary outage"}'))
         await page.get_by_test_id("logout-button").click()
         await expect(page.get_by_text("Sign out failed. Your session is still active. Please try again.")).to_be_visible()
-        await expect(page.get_by_test_id("repos-root")).to_be_visible()
+        await expect(page.get_by_test_id("dashboard-root")).to_be_visible()
         await page.unroute("**/api/auth/logout")
         checks.append("Failed logout keeps the session visible and offers recovery")
         await page.get_by_test_id("logout-button").click()
         await page.get_by_test_id("google-test-button").click()
-        await expect(page.get_by_test_id("user-email")).to_have_text("google-browser@gmail.com")
+        await expect(page.get_by_test_id("user-name")).to_have_text("Google Browser")
         google_user = (await (await page.request.get("http://127.0.0.1:5173/api/auth/me")).json())["user"]["id"]
         checks.append("Google callback exchanges a browser-bound credential for a session")
         await page.get_by_test_id("logout-button").click()
         await page.get_by_test_id("google-test-button").click()
-        await expect(page.get_by_test_id("user-email")).to_have_text("google-browser@gmail.com")
+        await expect(page.get_by_test_id("user-name")).to_have_text("Google Browser")
         assert (await (await page.request.get("http://127.0.0.1:5173/api/auth/me")).json())["user"]["id"] == google_user
         checks.append("Google sign-in works again after logout without a page reload")
         await page.get_by_test_id("logout-button").click()
@@ -311,7 +389,7 @@ async def main():
         await expect(page.get_by_role("alert")).to_contain_text("Incorrect CodeOS password")
         await page.get_by_label("CodeOS password", exact=True).fill("browser-password-123")
         await page.get_by_role("button", name="Connect Google and sign in").click()
-        await expect(page.get_by_test_id("user-email")).to_have_text("browser@example.com")
+        await expect(page.get_by_test_id("user-name")).to_have_text("Browser Tester")
         checks.append("Existing local account links Google only after a correct password")
         await page.get_by_test_id("logout-button").click()
         await page.evaluate("window.__googleIdentity = { nonce: 'wrong-browser' }")

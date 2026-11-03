@@ -1,190 +1,127 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../../lib/api";
-import BrainIcon from "../../assets/icons/brain.svg?react";
-import PlusIcon from "../../assets/icons/plus.svg?react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import PlusIcon from "../../assets/icons/plus.svg?react";
+import { api } from "../../lib/api";
+import { sortMemories } from "../../lib/engineeringMemory";
+import { useFetch } from "../../hooks/useFetch";
 import SearchMemory from "./SearchMemory";
 import MemoryList from "./MemoryList";
 import MemoryCreateForm from "./MemoryCreateForm";
 import MemoryDetail from "./MemoryDetail";
+import "../workspace.css";
+
+const newDraft = (repo_id = "") => ({ repo_id, category: "note", title: "", description: "", severity: "medium", file_path: "" });
 
 export default function MemoryPage() {
-  const [items, setItems] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [repos, setRepos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const filters = { repo_id: params.get("repo") || "", category: params.get("category") || "", severity: params.get("severity") || "", status: params.get("status") || "" };
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({ repo_id: "", category: "", severity: "", status: "" });
+  const [query, setQuery] = useState("");
+  const [order, setOrder] = useState("priority");
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({ repo_id: "", category: "note", title: "", description: "", severity: "medium", file_path: "" });
+  const [updating, setUpdating] = useState(false);
+  const [draft, setDraft] = useState(newDraft);
   const firstFieldRef = useRef(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
-      if (search.trim()) params.set("q", search.trim());
-      const url = `${search.trim() ? "/memory/search" : "/memory"}?${params.toString()}`;
-      const [r, s] = await Promise.all([
-        api.get(url),
-        api.get(`/memory/stats${filters.repo_id ? `?repo_id=${filters.repo_id}` : ""}`),
-      ]);
-      setItems(r.data); setStats(s.data);
-    } catch (e) {
-      setError(e?.response?.data?.detail || "Failed to load memory.");
-    } finally {
-      setLoading(false);
-    }
-  }, [filters, search]);
+  const resultParams = new URLSearchParams({ limit: "200" });
+  Object.entries(filters).forEach(([key, value]) => { if (value) resultParams.set(key, value); });
+  if (query) resultParams.set("q", query);
+  // Cancel superseded searches and repository scopes through useFetch.
+  const results = useFetch(`${query ? "/memory/search" : "/memory"}?${resultParams}`);
+  const statistics = useFetch(`/memory/stats${filters.repo_id ? `?repo_id=${encodeURIComponent(filters.repo_id)}` : ""}`);
+  const repositories = useFetch("/repos");
+  const items = results.data || [];
+  const repos = repositories.data || [];
+  const stats = statistics.loading ? null : statistics.data;
+  const currentRepo = repos.find(repo => repo.id === filters.repo_id);
+  const target = params.get("item");
 
   useEffect(() => {
-    api.get("/repos").then((r) => setRepos(r.data)).catch(() => toast.error("Failed to load repository list"));
-  }, []);
-  useEffect(() => {
-    const timer = setTimeout(load, search.trim() ? 250 : 0);
+    const timer = setTimeout(() => setQuery(search.trim()), 250);
     return () => clearTimeout(timer);
-  }, [load, search]);
-
-  // Escape closes whichever overlay is open (drawer takes precedence since
-  // it can be opened from within the create flow's resulting card).
+  }, [search]);
   useEffect(() => {
-    const onKey = (e) => {
-      if (e.key !== "Escape") return;
-      if (selected) setSelected(null);
-      else if (showCreate) setShowCreate(false);
+    if (!target) { setSelected(null); return; }
+    if (results.loading) return;
+    setSelected(results.data?.find(memory => memory.id === target) || null);
+  }, [target, results.data, results.loading]);
+
+  const closeDetail = () => {
+    setSelected(null);
+    if (target) setParams(previous => { const next = new URLSearchParams(previous); next.delete("item"); return next; }, { replace: true });
+  };
+  const setFilters = nextFilters => {
+    setSelected(null);
+    setParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete("item");
+      Object.entries(nextFilters).forEach(([key, value]) => {
+        const name = key === "repo_id" ? "repo" : key;
+        if (value) next.set(name, value); else next.delete(name);
+      });
+      return next;
+    });
+  };
+  useEffect(() => {
+    const onKey = event => {
+      if (event.key !== "Escape") return;
+      if (selected) closeDetail();
+      else if (!creating) setShowCreate(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, showCreate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, creating, target]);
+  useEffect(() => { if (showCreate) firstFieldRef.current?.focus(); }, [showCreate]);
 
-  useEffect(() => {
-    if (showCreate) firstFieldRef.current?.focus();
-  }, [showCreate]);
-
-  // Optimistic status update: the badge flips immediately; reverts + toasts
-  // on failure.
-  const update = async (mid, patch) => {
-    const snapshot = items;
-    setItems((its) => its.map((it) => (it.id === mid ? { ...it, ...patch } : it)));
-    setSelected((s) => (s && s.id === mid ? { ...s, ...patch } : s));
+  const refresh = () => { results.retry(); statistics.retry(); };
+  const update = async (id, patch) => {
+    if (updating) return;
+    setUpdating(true);
     try {
-      await api.patch(`/memory/${mid}`, patch);
-      await load();
-      toast.success("Updated");
-    } catch (err) {
-      setItems(snapshot); // rollback
-      setSelected((s) => (s && s.id === mid ? snapshot.find((x) => x.id === mid) || s : s));
-      toast.error(err?.response?.data?.detail || "Failed to update memory");
-    }
+      const response = await api.patch(`/memory/${id}`, patch);
+      setSelected(previous => previous?.id === id ? response.data : previous);
+      refresh();
+      toast.success("Status updated");
+    } catch (error) { toast.error(error?.response?.data?.detail || "Failed to update memory"); }
+    finally { setUpdating(false); }
   };
-
-  // Optimistic delete: card disappears immediately; restored on failure.
-  const remove = async (mid) => {
-    if (!window.confirm("Delete this memory?")) return;
-    const snapshot = items;
-    setItems((its) => its.filter((it) => it.id !== mid));
-    setSelected(null);
-    try {
-      await api.delete(`/memory/${mid}`);
-      await load();
-      toast.success("Deleted");
-    } catch (err) {
-      setItems(snapshot); // rollback
-      toast.error(err?.response?.data?.detail || "Failed to delete memory");
-    }
+  const remove = async id => {
+    if (updating || !window.confirm("Delete this memory?")) return;
+    setUpdating(true);
+    try { await api.delete(`/memory/${id}`); closeDetail(); refresh(); toast.success("Memory deleted"); }
+    catch (error) { toast.error(error?.response?.data?.detail || "Failed to delete memory"); }
+    finally { setUpdating(false); }
   };
-
-  // Optimistic create: a placeholder card appears in the grid the instant
-  // the form is submitted; it's swapped for the real record on success, or
-  // removed with an error toast on failure.
-  const createMemory = async (e) => {
-    e.preventDefault();
-    if (!draft.repo_id) { toast.error("Pick a repository"); return; }
-    if (!draft.title.trim()) { toast.error("Title is required"); return; }
+  const startCreate = () => { setDraft(newDraft(filters.repo_id || repos[0]?.id || "")); setShowCreate(true); };
+  const createMemory = async event => {
+    event.preventDefault();
+    if (creating) return;
+    if (!draft.repo_id || !draft.title.trim()) { toast.error("Choose a repository and enter a title"); return; }
     setCreating(true);
-    const placeholder = {
-      id: `optimistic-${Date.now()}`,
-      ...draft,
-      file_path: draft.file_path.trim() || null,
-      tags: [],
-      status: "open",
-    };
-    setItems((its) => [placeholder, ...its]);
-    setShowCreate(false);
     try {
-      const r = await api.post("/memory", { ...draft, file_path: draft.file_path.trim() || null, tags: [] });
-      setItems((its) => its.map((it) => (it.id === placeholder.id ? r.data : it)));
-      toast.success("Memory added");
-      setDraft({ repo_id: draft.repo_id, category: "note", title: "", description: "", severity: "medium", file_path: "" });
-      // Refresh stats to reflect the new item's counts.
-      api.get(`/memory/stats${filters.repo_id ? `?repo_id=${filters.repo_id}` : ""}`).then((s) => setStats(s.data)).catch(() => {});
-    } catch (err) {
-      setItems((its) => its.filter((it) => it.id !== placeholder.id)); // rollback
-      toast.error(err?.response?.data?.detail || "Failed to add memory");
-      setShowCreate(true); // let the user fix and resubmit without retyping
-    } finally {
-      setCreating(false);
-    }
+      await api.post("/memory", { ...draft, title: draft.title.trim(), file_path: draft.file_path.trim() || null, tags: [] });
+      setShowCreate(false); refresh(); toast.success("Memory added");
+    } catch (error) { toast.error(error?.response?.data?.detail || "Failed to add memory"); }
+    finally { setCreating(false); }
   };
+  const filtered = Boolean(search || filters.category || filters.severity || filters.status);
+  const countTabs = [["", "All", stats?.total], ["open", "Open", stats?.by_status?.open], ["in_progress", "In progress", stats?.by_status?.in_progress], ["resolved", "Resolved", stats?.by_status?.resolved]];
 
-  return (
-    <div className="p-6 md:p-8 space-y-5" data-testid="memory-page">
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.2em] mono text-white/40">{"// engineering memory"}</div>
-          <h1 className="text-3xl font-semibold tracking-tighter mt-1 flex items-center gap-2" style={{ fontFamily: "Chivo" }}><BrainIcon width={24} height={24} className="text-[#3FC8E8]" aria-hidden="true" /> Engineering Memory</h1>
-          <p className="text-sm text-white/50 mt-1">Persistent knowledge across reviews — findings, debt, decisions, and your own notes.</p>
-        </div>
-        <button
-          data-testid="memory-new-button"
-          onClick={() => { setDraft((d) => ({ ...d, repo_id: d.repo_id || repos[0]?.id || "" })); setShowCreate(true); }}
-          className="bg-gradient-to-b from-[#52D4F0] to-[#3FC8E8] hover:brightness-105 text-black px-3 py-2 rounded-lg text-sm flex items-center gap-1.5 transition-all duration-200 shadow-[0_4px_14px_-2px_rgba(63,200,232,0.4)] hover:shadow-[0_6px_20px_-2px_rgba(63,200,232,0.55)] hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8] focus-visible:outline-offset-2"
-        >
-          <PlusIcon width={14} height={14} aria-hidden="true" /> New memory
-        </button>
-      </div>
-
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 animate-in fade-in duration-200">
-          {[
-            ["Total", stats.total, "#fff"],
-            ["Open", stats.by_status?.open || 0, "#FFB300"],
-            ["In progress", stats.by_status?.in_progress || 0, "#3FC8E8"],
-            ["Resolved", stats.by_status?.resolved || 0, "#34C759"],
-            ["Critical+High", (stats.by_severity?.critical || 0) + (stats.by_severity?.high || 0), "#FF3B30"],
-          ].map(([l, v, c]) => (
-            <div key={l} className="glass-panel border border-white/10 rounded-xl p-3" data-testid={`memory-stat-${l.toLowerCase().replace(/\W/g, "-")}`}>
-              <div className="text-[10px] mono uppercase tracking-[0.18em] text-white/40">{l}</div>
-              <div className="text-2xl font-semibold mt-1" style={{ color: c, fontFamily: "Chivo" }}>{v}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <SearchMemory search={search} setSearch={setSearch} onSearchEnter={load} repos={repos} filters={filters} setFilters={setFilters} />
-
-      <MemoryList items={items} loading={loading} error={error} onRetry={load} onSelect={setSelected} onNew={() => setShowCreate(true)} />
-
-      {showCreate && (
-        <MemoryCreateForm
-          repos={repos}
-          draft={draft}
-          setDraft={setDraft}
-          creating={creating}
-          onSubmit={createMemory}
-          onClose={() => setShowCreate(false)}
-          firstFieldRef={firstFieldRef}
-        />
-      )}
-
-      {selected && (
-        <MemoryDetail selected={selected} onClose={() => setSelected(null)} onUpdate={update} onDelete={remove} />
-      )}
-    </div>
-  );
+  return <div className="workspace-page memory-page" data-testid="memory-page">
+    <header className="workspace-page-heading"><div><h1>Engineering Memory</h1><p>Saved findings, decisions, and next steps. Keep the context with the code, then return to it when you need it.</p></div><button data-testid="memory-new-button" onClick={startCreate} disabled={!repos.length} className="workspace-primary"><PlusIcon width={14} height={14} aria-hidden="true" /> New memory</button></header>
+    <SearchMemory search={search} setSearch={setSearch} onSearchEnter={() => setQuery(search.trim())} repos={repos} filters={filters} setFilters={setFilters} />
+    {repositories.error && <p className="memory-inline-error" role="alert">Repository list unavailable. <button onClick={repositories.retry}>Retry</button></p>}
+    <div className="memory-context"><div><span className="workspace-eyebrow">{currentRepo?.name || (filters.repo_id ? "Selected repository" : "Across your workspace")}</span><p>Saved context stays here until you update its status. Use “Check with AI” to revisit a finding against the indexed code.</p></div></div>
+    {stats && <div className="memory-status-tabs" aria-label="Filter memory by status">{countTabs.map(([status, label, value]) => <button key={status} data-testid={`memory-stat-${status || "total"}`} aria-pressed={filters.status === status} onClick={() => setFilters({ ...filters, status })}>{label}<span>{value || 0}</span></button>)}</div>}
+    {statistics.error && <p className="memory-inline-error" role="alert">Status counts unavailable. <button onClick={statistics.retry}>Retry</button></p>}
+    <div className="memory-list-heading"><p>{results.loading ? "Loading saved context…" : `${items.length} ${items.length === 1 ? "item" : "items"}${filtered ? " match your filters" : " saved"}`}</p><label>Sort by <select data-testid="memory-sort" value={order} onChange={event => setOrder(event.target.value)}><option value="priority">Priority</option><option value="recent">Recently updated</option></select></label></div>
+    {target && !results.loading && !results.error && !items.some(item => item.id === target) && <p className="memory-inline-error">This finding is no longer in these results. Clear the filters to look for it.</p>}
+    <MemoryList items={sortMemories(items, order)} repos={repos} loading={results.loading} error={results.error} onRetry={results.retry} onSelect={item => setParams(previous => { const next = new URLSearchParams(previous); next.set("item", item.id); return next; })} onUpdate={update} updating={updating} onNew={startCreate} canCreate={Boolean(repos.length)} filtered={filtered} onReset={() => { setSearch(""); setQuery(""); setFilters({ ...filters, category: "", severity: "", status: "" }); }} />
+    {items.length === 200 && <p className="workspace-muted mt-3">Showing up to 200 saved items. Narrow by repository, status, or search to find older work.</p>}
+    {showCreate && <MemoryCreateForm repos={repos} draft={draft} setDraft={setDraft} creating={creating} onSubmit={createMemory} onClose={() => !creating && setShowCreate(false)} firstFieldRef={firstFieldRef} />}
+    {selected && <MemoryDetail key={selected.id} selected={selected} repo={repos.find(repo => repo.id === selected.repo_id)} onClose={closeDetail} onUpdate={update} updating={updating} onDelete={remove} />}
+  </div>;
 }
