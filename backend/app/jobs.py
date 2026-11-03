@@ -70,9 +70,20 @@ async def enqueue(repo_id, user_id, kind="ingest", details=None, *, expected_fai
             raise HTTPException(409, "A repository job is already active; wait for it to finish.")
         if kind == "review" and repo["status"] != "ready":
             raise HTTPException(409, "Repository must be ready before starting a review.")
+        details = dict(details or {})
+        if kind == "ingest" and not details.get("index_checkpoint"):
+            # Re-ingesting the saved archive should reuse its completed index.
+            # The ingestion fingerprint and live store counts are checked again
+            # before accepting this checkpoint. Never copy provider credentials.
+            previous = (await conn.execute(select(db.jobs.c.details).where(
+                db.jobs.c.repo_id == repo_id, db.jobs.c.user_id == user_id,
+                db.jobs.c.kind == "ingest", db.jobs.c.status == "done",
+            ).order_by(db.jobs.c.created_at.desc()).limit(1))).scalar_one_or_none()
+            if previous and previous.get("index_checkpoint", {}).get("graph_ready"):
+                details["index_checkpoint"] = previous["index_checkpoint"]
         job = dict(id=str(uuid.uuid4()), repo_id=repo_id, user_id=user_id, kind=kind,
             status="queued", attempts=0, next_run_at=0.0, lease_until=0.0, lease_token=None,
-            cancel_requested=False, error=None, details=details or {}, created_at=db.now(), updated_at=db.now())
+            cancel_requested=False, error=None, details=details, created_at=db.now(), updated_at=db.now())
         await conn.execute(insert(db.jobs).values(**job))
         patch = {"active_job_id": job["id"], "updated_at": db.now()}
         if kind not in {"review", "cleanup"}:
@@ -157,7 +168,8 @@ async def _record_failure(job, exc):
             await conn.execute(update(db.repositories).where(db.repositories.c.id == job["repo_id"],
                 db.repositories.c.active_job_id == job["id"], ~db.repositories.c.status.in_(["deleting", "delete_failed"])).values(
                 status="waiting_embeddings", message=str(exc), updated_at=db.now()))
-        logger.warning("embedding_paused repo_id=%s reason=%s retry_after=%.0f", job["repo_id"], exc.reason, delay)
+        logger.log(logging.INFO if exc.reason == "pacing" else logging.WARNING,
+            "embedding_paused repo_id=%s reason=%s retry_after=%.0f", job["repo_id"], exc.reason, delay)
         return
     permanent = isinstance(exc, ValueError)
     retry = not permanent and job["attempts"] < settings.JOB_MAX_ATTEMPTS
@@ -222,6 +234,7 @@ async def run_once():
             if not job:
                 return False
             started = time.monotonic()
+            logger.info("job_started job_id=%s repo_id=%s kind=%s attempt=%d", job["id"], job["repo_id"], job["kind"], job["attempts"])
             pulse = asyncio.create_task(_heartbeat(job))
             try:
                 if job["attempts"] > settings.JOB_MAX_ATTEMPTS:

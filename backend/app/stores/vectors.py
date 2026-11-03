@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import math
+import logging
 import httpx
 
 from qdrant_client import AsyncQdrantClient, models
@@ -11,6 +12,7 @@ from ..models import CodeChunk
 from ..embedding_limits import EmbeddingBudget, EmbeddingDeferred, embedding_batches, embedding_retry_hint
 
 _budgets = {}
+logger = logging.getLogger(__name__)
 
 
 def _embedding_budget():
@@ -18,6 +20,8 @@ def _embedding_budget():
     if key not in _budgets:
         _budgets[key] = EmbeddingBudget(settings.EMBEDDING_REQUESTS_PER_MINUTE,
             settings.EMBEDDING_INPUTS_PER_MINUTE, settings.EMBEDDING_TOKENS_PER_MINUTE)
+        logger.info("embedding_budget_config requests_per_minute=%d inputs_per_minute=%d estimated_tokens_per_minute=%d",
+            settings.EMBEDDING_REQUESTS_PER_MINUTE, settings.EMBEDDING_INPUTS_PER_MINUTE, settings.EMBEDDING_TOKENS_PER_MINUTE)
     return _budgets[key]
 
 
@@ -37,7 +41,7 @@ class GeminiEmbedder:
         vectors = []
         budget = _embedding_budget()
         for batch in embedding_batches(texts):
-            await budget.wait(batch)
+            await budget.wait(batch, max_wait=None if query else 5)
             try:
                 async with asyncio.timeout(settings.AI_TIMEOUT_SECONDS):
                     result = await self._client.aio.models.embed_content(

@@ -41,9 +41,14 @@ function Workspace() {
   }, [location.state, location.pathname, location.search, repo.id, askInChat, navigate]);
 
   useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (TAB_KEYS.includes(requestedTab)) setActiveTab(requestedTab);
     const file = searchParams.get("file");
     const symbol = searchParams.get("symbol");
-    if (!file && !symbol) return;
+    if (!file && !symbol) {
+      if (requestedTab) setSearchParams({}, { replace: true });
+      return;
+    }
     if (symbol) {
       const match = graph.nodes.find((n) => n.qualified_name === symbol);
       if (match) selectNode(match.id);

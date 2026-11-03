@@ -330,8 +330,11 @@ async def main():
         await page.get_by_test_id("zip-file-input").set_input_files({"name": "quota-paused.zip", "mimeType": "application/zip", "buffer": paused_zip.getvalue()})
         await page.get_by_test_id("upload-zip-button").click()
         await expect(page.get_by_text("AI indexing paused", exact=True)).to_be_visible(timeout=20000)
-        await page.get_by_role("link", name="quota-paused", exact=True).click()
-        paused_id = page.url.rsplit("/", 1)[-1]
+        explore = page.get_by_role("link", name="Explore files and graph →", exact=True)
+        await expect(explore).to_be_visible()
+        paused_id = re.search(r"/repositories/([^?]+)", await explore.get_attribute("href")).group(1)
+        await explore.click()
+        await expect(page.get_by_test_id("tab-graph")).to_have_attribute("data-state", "active")
         await expect(page.get_by_test_id("knowledge-graph")).to_be_visible()
         await expect(page.get_by_test_id("workspace-reingest")).to_be_disabled()
         await page.get_by_test_id("tab-files").click()
