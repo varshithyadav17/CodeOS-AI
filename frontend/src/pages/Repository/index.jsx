@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 import SelectionBar from "./SelectionBar";
 import WorkspaceHeader from "./WorkspaceHeader";
@@ -25,8 +25,20 @@ function PanelFallback() {
 const TAB_KEYS = ["chat", "review", "arch", "graph", "files", "docs", "timeline"];
 
 function Workspace() {
-  const { repo, graph, activeTab, setActiveTab, selectFile, selectNode, clearSelection } = useWorkspace();
+  const { repo, graph, activeTab, setActiveTab, selectFile, selectNode, clearSelection, askInChat } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const context = location.state?.memoryContext;
+    if (!context) return;
+    if (context.repo_id === repo.id && typeof context.prompt === "string" && context.prompt.length <= 12000) {
+      askInChat(context.prompt);
+    }
+    // The draft is consumed once. Sending remains an explicit action in chat.
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [location.state, location.pathname, location.search, repo.id, askInChat, navigate]);
 
   useEffect(() => {
     const file = searchParams.get("file");

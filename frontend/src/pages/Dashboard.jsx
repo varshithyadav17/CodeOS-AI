@@ -1,107 +1,57 @@
-import { Link } from "react-router-dom";
-import ArrowUpRight from "../assets/icons/arrow-up-right.svg?react";
-import GitBranch from "../assets/icons/git-branch.svg?react";
-import FileCode2 from "../assets/icons/file-code-2.svg?react";
-import Network from "../assets/icons/network.svg?react";
-import MessageSquare from "../assets/icons/message-square.svg?react";
-import Activity from "../assets/icons/activity.svg?react";
-import { useFetch } from "../hooks/useFetch";
-import { SkeletonGrid } from "../components/Skeleton";
-import { ErrorState } from "../components/EmptyState";
+import { Link } from 'react-router-dom';
+import ArrowUpRight from '../assets/icons/arrow-up-right.svg?react';
+import GitBranch from '../assets/icons/git-branch.svg?react';
+import MessageSquare from '../assets/icons/message-square.svg?react';
+import PlusIcon from '../assets/icons/plus.svg?react';
+import { useFetch } from '../hooks/useFetch';
+import { SkeletonList } from '../components/Skeleton';
+import { ErrorState } from '../components/EmptyState';
+import { repositoryStatusLabel } from '../lib/repositoryStatus';
+import { isActionableMemory, sortMemories } from '../lib/engineeringMemory';
+import './workspace.css';
 
-const StatCard = ({ label, value, hint, testId, icon: Icon }) => (
-  <div data-testid={testId} className="glass-panel border border-white/10 rounded-xl p-4 hover:border-white/30 transition-colors duration-150">
-    <div className="flex items-center justify-between">
-      <div className="text-[10px] uppercase tracking-[0.18em] mono text-white/40">{label}</div>
-      <Icon width={14} height={14} className="text-white/40" aria-hidden="true" />
-    </div>
-    <div className="text-3xl font-semibold mt-3 tracking-tighter" style={{ fontFamily: "Chivo" }}>{value}</div>
-    {hint && <div className="text-[11px] mt-1 text-white/40">{hint}</div>}
-  </div>
-);
+function ActivityFeed({ items }) {
+  return <ol className="activity-feed">{items.length ? items.slice(0, 8).map(item => <li key={item.id}>
+    <span className="activity-dot" /><div><p>{item.message}</p><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></div>
+  </li>) : <li className="workspace-muted">Your imports, questions and reviews will appear here.</li>}</ol>;
+}
 
 export default function Dashboard() {
-  const { data: stats, loading, error, retry } = useFetch("/stats");
-
-  return (
-    <div className="p-6 md:p-8 space-y-6" data-testid="dashboard-root">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.2em] mono text-white/40">{"// overview"}</div>
-          <h1 className="text-3xl font-semibold tracking-tighter mt-1" style={{ fontFamily: "Chivo" }}>Engineering Dashboard</h1>
+  const { data: stats, loading, error, retry } = useFetch('/stats');
+  const repoResult = useFetch('/repos');
+  const memoryResult = useFetch('/memory?limit=200');
+  const repos = [...(repoResult.data || [])].sort((a, b) => (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0));
+  const ready = repos.filter(repo => repo.status === 'ready');
+  const attention = repos.filter(repo => ['failed', 'delete_failed', 'waiting_embeddings'].includes(repo.status));
+  const findings = sortMemories(memoryResult.data || []).filter(isActionableMemory).slice(0, 3);
+  const repoNames = new Map(repos.map(repo => [repo.id, repo.name]));
+  return <div className="workspace-page dashboard-page" data-testid="dashboard-root">
+    <header className="workspace-page-heading"><div><h1>Dashboard</h1><p>Your repositories, recent work, and what needs attention.</p></div>
+      <Link to="/repositories" data-testid="dashboard-add-repo" className="workspace-primary">Add repository <PlusIcon width={14} height={14} aria-hidden="true" /></Link>
+    </header>
+    {error && <ErrorState message={error} onRetry={retry} testId="dashboard-error" />}
+    {!error && loading && <SkeletonList rows={5} rowClassName="h-16" />}
+    {!error && !loading && <>
+      <section className="workspace-overview" aria-label="Workspace overview">
+        <div className="workspace-overview-main"><span className="workspace-eyebrow">Indexed workspace</span>
+          <div className="workspace-big-metric" data-testid="stat-files"><strong>{(stats?.files_indexed || 0).toLocaleString()}</strong><span>source files</span></div>
+          <div className="workspace-repo-total" data-testid="stat-repos"><strong>{stats?.repos_count || 0}</strong> {stats?.repos_count === 1 ? 'repository' : 'repositories'}{!repoResult.loading && !repoResult.error && <><span className="workspace-dot-divider">·</span> {ready.length} ready to explore</>}</div>
+          <div className="workspace-overview-foot">{stats?.repos_count ? 'Open a repository to trace code, ask questions, or start a review.' : 'Bring in your first repository to build a searchable view of your code.'}</div>
         </div>
-        <Link to="/repositories" data-testid="dashboard-add-repo" className="text-sm bg-gradient-to-b from-[#52D4F0] to-[#3FC8E8] hover:brightness-105 text-black px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 shadow-[0_4px_14px_-2px_rgba(63,200,232,0.4)] hover:shadow-[0_6px_20px_-2px_rgba(63,200,232,0.55)] hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8] focus-visible:outline-offset-2">
-          + Add repository <ArrowUpRight width={14} height={14} aria-hidden="true" />
-        </Link>
-      </div>
-
-      {error && <ErrorState message={error} onRetry={retry} testId="dashboard-error" />}
-
-      {!error && loading && (
-        <>
-          <SkeletonGrid cols={5} count={6} cardClassName="h-[92px]" />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 h-48 bg-white/[0.06] rounded-sm animate-pulse" />
-            <div className="h-48 bg-white/[0.06] rounded-sm animate-pulse" />
-          </div>
-        </>
-      )}
-
-      {!error && !loading && (
-        <div className="animate-in fade-in duration-200">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <StatCard testId="stat-repos" label="Repos" value={stats?.repos_count ?? 0} icon={GitBranch} />
-            <StatCard testId="stat-files" label="Files" value={stats?.files_indexed ?? 0} icon={FileCode2} />
-            <StatCard testId="stat-nodes" label="Graph nodes" value={stats?.nodes ?? 0} icon={Network} />
-            <StatCard testId="stat-edges" label="Graph edges" value={stats?.edges ?? 0} icon={Network} />
-            <StatCard testId="stat-chunks" label="Chunks" value={stats?.chunks ?? 0} icon={FileCode2} />
-            <StatCard testId="stat-llm" label="Chat answers" value={stats?.llm_calls ?? 0} icon={MessageSquare} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-            <div className="lg:col-span-2 glass-panel border border-white/10 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.18em] mono text-white/40">{"// ingestion pipeline"}</div>
-                  <h2 className="text-lg tracking-tight font-medium mt-1" style={{ fontFamily: "Chivo" }}>How CodeOS understands your code</h2>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                {[
-                  { n: "1", t: "Clone / Upload", d: "GitHub or ZIP" },
-                  { n: "2", t: "Analyze source", d: "Files + symbols" },
-                  { n: "3", t: "Knowledge Graph", d: "Nodes + edges" },
-                  { n: "4", t: "Hybrid retrieval", d: "Vector + graph" },
-                ].map((s) => (
-                  <div key={s.n} className="border border-white/10 p-3 rounded-xl glass-panel-soft">
-                    <div className="text-[10px] mono text-[#3FC8E8]">[{s.n}]</div>
-                    <div className="text-white text-xs mt-1 font-medium">{s.t}</div>
-                    <div className="text-white/40 text-[11px] mt-0.5">{s.d}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="glass-panel border border-white/10 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Activity width={14} height={14} className="text-[#3FC8E8]" aria-hidden="true" />
-                <h2 className="text-sm font-medium tracking-tight" style={{ fontFamily: "Chivo" }}>Recent activity</h2>
-              </div>
-              <div className="space-y-2 max-h-72 overflow-auto pr-1">
-                {(stats?.recent_activity || []).length === 0 && (
-                  <div className="text-white/40 text-xs">No activity yet. Add a repository to get started.</div>
-                )}
-                {(stats?.recent_activity || []).map((a) => (
-                  <div key={a.id} className="border-l-2 border-white/10 pl-3 py-1 hover:border-[#3FC8E8] transition-colors duration-150">
-                    <div className="text-xs text-white/80">{a.message}</div>
-                    <div className="text-[10px] mono text-white/30">{new Date(a.created_at).toLocaleString()}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+        <div className="workspace-overview-side"><div className="workspace-graph-totals"><span className="workspace-eyebrow">Code graph</span>
+          <div data-testid="stat-nodes"><strong>{(stats?.nodes || 0).toLocaleString()}</strong><span>symbols & files</span></div>
+          <div className="workspace-small-metrics"><span data-testid="stat-edges">{(stats?.edges || 0).toLocaleString()} relationships</span><span data-testid="stat-chunks">{(stats?.chunks || 0).toLocaleString()} indexed chunks</span></div>
+        </div><div className="workspace-chat-total"><MessageSquare width={18} height={18} aria-hidden="true" /><div><strong data-testid="stat-llm">{stats?.llm_calls || 0}</strong><span>chat answers grounded in your code</span></div></div></div>
+      </section>
+      <div className="dashboard-columns"><div className="dashboard-main-column">
+        <section className="workspace-section" aria-labelledby="recent-repos-title"><div className="workspace-section-heading"><div><span className="workspace-eyebrow">Pick up your work</span><h2 id="recent-repos-title">Recently updated repositories</h2></div><Link to="/repositories" className="workspace-text-link">View all <ArrowUpRight width={13} height={13} /></Link></div>
+          {repoResult.error ? <ErrorState message={repoResult.error} onRetry={repoResult.retry} compact /> : repoResult.loading ? <SkeletonList rows={3} /> : repos.length ? <ul className="dashboard-repos">{repos.slice(0, 5).map(repo => <li key={repo.id}><Link to={`/repositories/${repo.id}`} data-testid={`dashboard-repo-${repo.id}`}><div className="workspace-repo-icon"><GitBranch width={17} height={17} aria-hidden="true" /></div><div className="dashboard-repo-info"><strong>{repo.name}</strong><span>{repo.stats?.files || 0} files · {repo.stats?.nodes || 0} graph nodes</span></div><span className={`workspace-status ${repo.status === 'ready' ? 'is-ready' : 'is-pending'}`}>{repositoryStatusLabel(repo.status)}</span><ArrowUpRight className="dashboard-repo-arrow" width={16} height={16} aria-hidden="true" /></Link></li>)}</ul> : <div className="workspace-blank"><h3>A home for your codebases</h3><p>Connect GitHub or upload a ZIP. Your files, graph, reviews and saved findings stay together.</p><Link to="/repositories" className="workspace-text-link">Import your first repository →</Link></div>}
+          {attention.length > 0 && <p className="workspace-attention">{attention.length} {attention.length === 1 ? 'repository needs' : 'repositories need'} attention. <Link to="/repositories">Check import status →</Link></p>}
+        </section>
+        <section className="workspace-section dashboard-findings" aria-labelledby="dashboard-findings-title"><div className="workspace-section-heading"><div><span className="workspace-eyebrow">From Engineering Memory</span><h2 id="dashboard-findings-title">Open work to revisit</h2></div><Link to="/memory?status=open" className="workspace-text-link">View memory <ArrowUpRight width={13} height={13} /></Link></div>
+          {memoryResult.error ? <ErrorState message={memoryResult.error} onRetry={memoryResult.retry} compact /> : memoryResult.loading ? <SkeletonList rows={2} /> : findings.length ? <ul className="dashboard-findings-list">{findings.map(item => <li key={item.id}><Link to={`/memory?repo=${item.repo_id}&item=${item.id}`}><span className={`memory-severity-dot severity-${item.severity}`} /><div><strong>{item.title}</strong><span>{repoNames.get(item.repo_id) || 'Repository'} · {item.category.replaceAll('_', ' ')}</span></div><span className="workspace-text-link">Review →</span></Link></li>)}</ul> : <div className="workspace-blank compact"><p>No open findings saved yet. Save review findings or a note to keep the next step close to the code.</p></div>}
+        </section>
+      </div><aside className="workspace-section dashboard-activity"><div className="workspace-section-heading"><div><span className="workspace-eyebrow">Latest updates</span><h2>Activity</h2></div></div><ActivityFeed items={stats?.recent_activity || []} /></aside></div>
+    </>}
+  </div>;
 }

@@ -66,6 +66,7 @@ export default function WorkspaceHeader({ repo }) {
       </div>
       {repo.message && repo.status !== "ready" && <p role="status" className="text-xs text-white/60 w-full">{repo.message}</p>}
       {["failed", "delete_failed"].includes(repo.status) && <Link to="/repositories" className="text-xs text-[#3FC8E8]">Open repositories to retry or delete</Link>}
+      <Link to={`/memory?repo=${repo.id}`} data-testid="workspace-memory" className="text-xs text-[#91cfcc] hover:text-white border border-white/15 rounded-md px-3 py-1.5">Saved findings</Link>
       {hasParsedWorkspace(repo) && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs min-w-0">
           {STATS.map(({ l, k, i: StatIcon }) => (

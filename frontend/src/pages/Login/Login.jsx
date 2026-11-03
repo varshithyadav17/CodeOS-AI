@@ -29,7 +29,7 @@ export default function AuthPage() {
         await signup(email, password, name);
         toast.success("Account created");
       }
-      nav("/repositories");
+      nav("/dashboard");
     } catch (err) {
       toast.error(err?.response?.data?.detail || "Authentication failed");
     } finally {
@@ -92,7 +92,7 @@ export default function AuthPage() {
           </div>
 
           <GoogleSignIn busy={busy} onSignedIn={() => {
-            toast.success("Signed in with Google"); nav("/repositories");
+            toast.success("Signed in with Google"); nav("/dashboard");
           }} />
 
           <div className="flex items-center gap-3 my-5 text-[10px] uppercase tracking-[0.2em] text-white/30 mono">

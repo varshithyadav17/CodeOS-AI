@@ -34,6 +34,10 @@ jobs:
       CODEOS_LIVE_GITHUB_TESTS: '1'
       CODEOS_QA_GRAPH_SCREENSHOT: qa/graph-desktop.png
       CODEOS_QA_GRAPH_MOBILE_SCREENSHOT: qa/graph-mobile.png
+      CODEOS_QA_DASHBOARD_SCREENSHOT: qa/dashboard-desktop.png
+      CODEOS_QA_DASHBOARD_MOBILE_SCREENSHOT: qa/dashboard-mobile.png
+      CODEOS_QA_MEMORY_SCREENSHOT: qa/memory-desktop.png
+      CODEOS_QA_MEMORY_MOBILE_SCREENSHOT: qa/memory-mobile.png
       CODEOS_BROWSER_REPORT: qa/browser-report.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
