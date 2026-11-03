@@ -46,9 +46,10 @@ export default function RepositoryCard({ r, onReingest, onDelete }) {
               <span>{r.stats?.loc || 0} loc</span>
               <span>{r.stats?.nodes || 0} nodes</span>
               <span>{r.stats?.edges || 0} edges</span>
-              <span>{r.stats?.chunks || 0} chunks</span>
+              <span>{r.stats?.chunks || 0}{r.status !== "ready" && r.stats?.chunks_total ? `/${r.stats.chunks_total}` : ""} indexed chunks</span>
             </div>
           )}
+          {hasParsedWorkspace(r) && r.status !== "ready" && <div className="mt-3 text-xs leading-relaxed text-white/60"><p>Your source and graph are available while AI search finishes indexing.</p><Link to={`/repositories/${r.id}?tab=graph`} data-testid={`repo-explore-${r.id}`} className="inline-flex mt-2 text-[#91cfcc] underline underline-offset-4">Explore files and graph →</Link></div>}
         </div>
         <div className="flex items-center gap-1">
           <button data-testid={`repo-reingest-${r.id}`} disabled={!["ready", "failed"].includes(r.status)} onClick={() => onReingest(r.id)} aria-label={`Reingest ${r.name}`} title="Reingest" className="p-2 hover:bg-white/5 rounded-sm text-white/50 hover:text-white transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3FC8E8]"><RefreshCwIcon width={14} height={14} aria-hidden="true" /></button>

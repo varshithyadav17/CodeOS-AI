@@ -189,3 +189,97 @@ async def test_clone_errors_are_actionable_and_do_not_expose_git_stderr(monkeypa
     with pytest.raises(exception, match=message) as failure:
         await service.clone_github('https://github.com/example/repo', tmp_path / 'source')
     assert 'confidential-provider-detail' not in str(failure.value)
+
+
+async def test_background_pacing_yields_without_sleeping_or_reserving_capacity():
+    clock = Clock()
+    budget = EmbeddingBudget(20, 80, 100, clock=lambda: clock.now, sleep=clock.sleep)
+    await budget.wait(['a' * 240], max_wait=5)  # 80 estimated tokens.
+    with pytest.raises(EmbeddingDeferred) as failure:
+        await budget.wait(['b' * 240], max_wait=5)
+    assert failure.value.reason == 'pacing' and failure.value.retry_after >= 60
+    assert clock.now == 0 and not clock.waits
+    assert len(budget.events) == 1 and not budget.lock.locked()
+    # A small interactive query can use remaining tokens without waiting for
+    # the background document's larger request or holding its queue lock.
+    clock.now = 4
+    await budget.wait(['query'])
+    assert clock.now == 4 and len(budget.events) == 2
+
+
+async def test_waiting_embedding_request_releases_lock_and_rechecks_shared_cooldown():
+    import asyncio
+    started, resume = asyncio.Event(), asyncio.Event()
+    current = [0.0]
+
+    async def sleep(delay):
+        started.set()
+        await resume.wait()
+        current[0] += delay
+
+    budget = EmbeddingBudget(20, 80, 24000, clock=lambda: current[0], sleep=sleep)
+    await budget.wait(['source'])
+    waiting = asyncio.create_task(budget.wait(['next']))
+    await started.wait()
+    assert not budget.lock.locked()
+    budget.defer(180, 'quota')
+    resume.set()
+    with pytest.raises(EmbeddingDeferred) as failure:
+        await waiting
+    assert failure.value.reason == 'quota' and len(budget.events) == 1
+
+
+async def test_reingest_unchanged_archive_reuses_completed_embeddings(logged_in, monkeypatch):
+    client, graph, vectors, storage = logged_in
+    repo = await ready_repo(client)
+    previous_nodes = set(graph.nodes)
+    embed = AsyncMock(side_effect=AssertionError('Unchanged code must reuse its saved embeddings'))
+    monkeypatch.setattr(vectors.embedder, 'embed', embed)
+    assert (await client.post(f"/api/repos/{repo['id']}/reingest")).status_code == 202
+    assert await run_once()
+    updated = (await client.get(f"/api/repos/{repo['id']}")).json()
+    assert updated['status'] == 'ready' and updated['stats'] == repo['stats']
+    assert set(graph.nodes) == previous_nodes and len(storage.objects) == 1
+    assert embed.await_count == 0
+
+
+async def test_reingest_repairs_a_missing_vector_index_instead_of_accepting_cached_counts(logged_in, monkeypatch):
+    client, _, vectors, _ = logged_in
+    repo = await ready_repo(client)
+    await vectors.delete_namespace(repo['id'])
+    embed = AsyncMock(wraps=vectors.embedder.embed)
+    monkeypatch.setattr(vectors.embedder, 'embed', embed)
+    assert (await client.post(f"/api/repos/{repo['id']}/reingest")).status_code == 202
+    assert await run_once()
+    updated = (await client.get(f"/api/repos/{repo['id']}")).json()
+    assert updated['status'] == 'ready' and embed.await_count > 0
+    assert await vectors.count(repo['id']) == repo['stats']['chunks']
+
+
+async def test_paced_indexing_leaves_worker_available_for_the_next_repository(logged_in, monkeypatch):
+    client, graph, vectors, _ = logged_in
+    original = vectors.embedder.embed
+    calls = 0
+
+    async def pace_after_first_batch(texts, query=False):
+        nonlocal calls
+        calls += 1
+        if calls >= 2:
+            raise EmbeddingDeferred(45, 'pacing')
+        return await original(texts, query=query)
+
+    monkeypatch.setattr(vectors.embedder, 'embed', pace_after_first_batch)
+    first = await upload(client, source_zip({f'module_{i}.py': f'VALUE = {i}\n' for i in range(20)}))
+    second = await upload(client, name='second')
+    assert await run_once()
+    assert (await client.get(f"/api/repos/{first['id']}")).json()['stats']['chunks'] == 8
+    assert await run_once()
+    for repo in (first, second):
+        current = (await client.get(f"/api/repos/{repo['id']}")).json()
+        assert current['status'] == 'waiting_embeddings'
+        assert current['stats']['nodes'] > 0 and await graph.count_nodes(repo['id']) > 0
+        assert (await client.get(f"/api/repos/{repo['id']}/files")).status_code == 200
+    async with db.get_engine().connect() as conn:
+        jobs = (await conn.execute(select(db.jobs))).mappings().all()
+    assert all(job['status'] == 'retry' and job['attempts'] == 0 for job in jobs)
+    assert all(job['details']['pause_reason'] == 'pacing' for job in jobs)

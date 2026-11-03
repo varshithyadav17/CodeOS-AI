@@ -177,6 +177,8 @@ class IngestionService:
             # Normalize GitHub-style ZIPs with a single wrapper directory.
             children = [p for p in root.iterdir() if p.name != "__MACOSX"]
             source_root = children[0] if repo.source == "zip" and len(children) == 1 and children[0].is_dir() else root
+            logger.info("ingestion_stage repo_id=%s stage=source seconds=%.3f", repo.id, time.monotonic()-started)
+            stage_started = time.monotonic()
             if not checkpoint.get("graph_ready"):
                 await self._update(job, status="parsing", progress=25, message="Parsing source and building symbols")
             parsed = await blocking(ParserService().parse_repo, source_root)
@@ -192,6 +194,9 @@ class IngestionService:
                 raise ValueError("Repository contains no non-empty text to index.")
             fingerprint = hashlib.sha256(("index-v2:" + repo.archive_sha256 + ":" + self.vectors.fingerprint
                 + ":" + ":".join(c.id for c in chunks)).encode()).hexdigest()
+            logger.info("ingestion_stage repo_id=%s stage=parse seconds=%.3f files=%d chunks=%d",
+                repo.id, time.monotonic()-stage_started, len(parsed), len(chunks))
+            stage_started = time.monotonic()
             await self.graph.initialize()
             await self.vectors.initialize()
             await check_job(job)
@@ -220,6 +225,7 @@ class IngestionService:
             await self._update(job, status="embedding", progress=70 + int(24 * offset / len(chunks)),
                 message=f"Files and graph ready. AI indexing: {offset}/{len(chunks)} chunks.",
                 file_manifest=manifest, language_breakdown=languages, stats=stats.model_dump())
+            logger.info("ingestion_stage repo_id=%s stage=graph seconds=%.3f resumed=%s", repo.id, time.monotonic()-stage_started, bool(resume))
             logger.info("ingestion_index repo_id=%s files=%d nodes=%d edges=%d chunks=%d completed=%d resumed=%s",
                 repo.id, len(parsed), len(nodes), len(edges), len(chunks), offset, bool(resume))
             # Checkpoint only completed writes. Each batch also reuses existing
@@ -240,7 +246,7 @@ class IngestionService:
             actual = (await self.graph.count_nodes(repo.id), await self.graph.count_edges(repo.id), await self.vectors.count(repo.id))
             if actual != (len(nodes), len(edges), len(chunks)):
                 raise RuntimeError("Index count verification failed.")
-            logger.info("ingestion_ready repo_id=%s files=%d chunks=%d", repo.id, len(parsed), len(chunks))
+            logger.info("ingestion_ready repo_id=%s files=%d chunks=%d seconds=%.3f", repo.id, len(parsed), len(chunks), time.monotonic()-started)
             stats.chunks = len(chunks)
             await self._update(job, status="ready", progress=100, message="Ready", file_manifest=manifest,
                 language_breakdown=languages, stats=stats.model_dump())

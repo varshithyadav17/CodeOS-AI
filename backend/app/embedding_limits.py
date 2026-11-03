@@ -2,10 +2,13 @@
 from __future__ import annotations
 import asyncio
 import math
+import logging
 import time
 from collections import deque
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingDeferred(Exception):
@@ -13,6 +16,7 @@ class EmbeddingDeferred(Exception):
         self.retry_after = max(1.0, float(retry_after))
         self.reason = reason
         messages = {
+            "pacing": "Files and graph are ready to explore. AI indexing is continuing in the background at the configured free-tier rate.",
             "quota": "Google's embedding quota is temporarily full. Your files and graph are saved; AI indexing will resume automatically.",
             "daily_quota": "Google's daily embedding quota is exhausted. Your files and graph are saved; AI indexing will resume after the quota reset.",
             "unavailable": "The embedding provider is temporarily unavailable. Your files and graph are saved; AI indexing will retry automatically.",
@@ -86,10 +90,10 @@ class EmbeddingBudget:
         self.cooldown = max(self.cooldown, self.clock() + seconds)
         self.reason = reason
 
-    async def wait(self, texts):
+    async def wait(self, texts, *, max_wait=None):
         cost = min(self.tokens, sum(estimated_tokens(text) for text in texts))
-        async with self.lock:
-            while True:
+        while True:
+            async with self.lock:
                 now = self.clock()
                 if self.cooldown > now:
                     raise EmbeddingDeferred(self.cooldown - now, self.reason)
@@ -100,7 +104,13 @@ class EmbeddingBudget:
                                     or sum(e[2] for e in self.events) + cost > self.tokens):
                     delay = max(delay, self.events[0][0] + 60.5 - now)
                 if delay <= 0:
-                    break
-                await self.sleep(delay)
-            self.events.append((now, len(texts), cost))
-            self.next_request = now + self.interval
+                    self.events.append((now, len(texts), cost))
+                    self.next_request = now + self.interval
+                    return
+            # A background import must not hold the worker or the budget lock
+            # through a minute-long token window. Checkpoint it and run other
+            # repositories; interactive queries can reserve available capacity.
+            if max_wait is not None and delay > max_wait:
+                logger.info("embedding_budget_yield seconds=%.3f inputs=%d estimated_tokens=%d", delay, len(texts), cost)
+                raise EmbeddingDeferred(delay, "pacing")
+            await self.sleep(delay)
