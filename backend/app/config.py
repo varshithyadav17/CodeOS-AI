@@ -25,6 +25,7 @@ class Settings:
     DATABASE_URL = async_database_url(os.getenv("DATABASE_URL", "postgresql+asyncpg://codeos:codeos@localhost:5432/codeos"))
     DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
     JWT_SECRET = os.getenv("JWT_SECRET", "")
+    GOOGLE_CHALLENGE_SECRET = os.getenv("GOOGLE_CHALLENGE_SECRET", "")
     JWT_ALGORITHM = "HS256"
     JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
     COOKIE_NAME = "codeos_token"
@@ -76,6 +77,10 @@ def validate_startup_config() -> None:
     errors = []
     if len(settings.JWT_SECRET) < 32:
         errors.append("Set JWT_SECRET to a random value of at least 32 characters (see .env.example).")
+    if settings.GOOGLE_CHALLENGE_SECRET and len(settings.GOOGLE_CHALLENGE_SECRET) < 32:
+        errors.append("GOOGLE_CHALLENGE_SECRET must contain at least 32 random characters.")
+    if settings.GOOGLE_CHALLENGE_SECRET and settings.GOOGLE_CHALLENGE_SECRET == settings.JWT_SECRET:
+        errors.append("GOOGLE_CHALLENGE_SECRET must differ from JWT_SECRET.")
     if "*" in settings.CORS_ORIGINS:
         errors.append("CORS_ORIGINS must contain explicit frontend origins.")
     if settings.COOKIE_SAMESITE not in {"lax", "strict", "none"}:

@@ -23,6 +23,19 @@ logger = logging.getLogger(__name__)
 GOOGLE_COOKIE = "codeos_google_nonce"
 
 
+def decode_google_challenge(cookie: str | None) -> dict:
+    # Accept outstanding cookies issued before the separate key was configured.
+    for key in filter(None, (settings.GOOGLE_CHALLENGE_SECRET, settings.JWT_SECRET)):
+        try:
+            return jwt.decode(
+                cookie or "", key, algorithms=["HS256"], audience="codeos-google",
+                issuer="codeos-ai", options={"require": ["sub", "exp", "iat", "aud", "iss"]},
+            )
+        except jwt.PyJWTError:
+            continue
+    raise HTTPException(401, "Google sign-in expired. Refresh sign-in and try again.")
+
+
 def public_user(user):
     return user.model_dump(exclude={"password_hash", "google_subject"})
 
@@ -189,10 +202,13 @@ async def google_challenge(response: Response):
     if not settings.GOOGLE_CLIENT_ID:
         return {"enabled": False}
     nonce = secrets.token_urlsafe(32)
+    issued_at = int(time.time())
     challenge = jwt.encode({"sub": nonce, "iss": "codeos-ai", "aud": "codeos-google",
-        "iat": int(time.time()), "exp": int(time.time()) + 600}, settings.JWT_SECRET, algorithm="HS256")
+        "iat": issued_at, "exp": issued_at + 600},
+        settings.GOOGLE_CHALLENGE_SECRET or settings.JWT_SECRET, algorithm="HS256")
     response.set_cookie(GOOGLE_COOKIE, challenge, max_age=600, httponly=True,
         secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, domain=settings.COOKIE_DOMAIN, path="/api/auth")
+    response.headers["X-CodeOS-Auth-Source"] = "render"
     return {"enabled": True, "client_id": settings.GOOGLE_CLIENT_ID, "nonce": nonce, "expires_in": 600}
 
 
@@ -206,11 +222,7 @@ async def google(
     """Verify a Google ID token and exchange it for our JWT."""
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(503, "Google sign-in is currently unavailable. Use email sign-in.")
-    try:
-        challenge = jwt.decode(google_nonce or "", settings.JWT_SECRET, algorithms=["HS256"],
-            audience="codeos-google", issuer="codeos-ai", options={"require": ["sub", "exp", "iat", "aud", "iss"]})
-    except jwt.PyJWTError:
-        raise HTTPException(401, "Google sign-in expired. Refresh sign-in and try again.")
+    challenge = decode_google_challenge(google_nonce)
     try:
         idinfo = await blocking(verify_google_credential, body.credential)
     except google_exceptions.TransportError:

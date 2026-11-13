@@ -111,3 +111,49 @@ async def test_legacy_third_party_email_is_not_linked_automatically(system, goog
     token = google_signer(await challenge(client), email=user.email)
     assert (await client.post("/api/auth/google", json={"credential": token})).status_code == 409
     assert (await db.get_user_repo().get(user.id)).google_subject is None
+
+
+NONCE_TEST_KEY = "isolated-google-challenge-test-key-over-32-characters"
+
+
+def external_challenge(client, key, **overrides):
+    now = int(time.time())
+    claims = {"sub": "browser-bound-test-nonce", "iss": "codeos-ai", "aud": "codeos-google",
+        "iat": now, "exp": now + 600, **overrides}
+    signed = jwt.encode(claims, key, algorithm="HS256")
+    client.cookies.set("codeos_google_nonce", signed, domain="test.local", path="/api/auth")
+    return claims["sub"]
+
+
+async def test_frontend_nonce_key_works_without_access_to_session_signing(system, google_signer, monkeypatch):
+    client, *_ = system
+    monkeypatch.setattr(settings, "GOOGLE_CHALLENGE_SECRET", NONCE_TEST_KEY)
+    credential = google_signer(external_challenge(client, NONCE_TEST_KEY))
+    response = await client.post("/api/auth/google", json={"credential": credential})
+    assert response.status_code == 200
+    user = response.json()["user"]
+    assert (await client.get("/api/auth/me")).json()["user"]["id"] == user["id"]
+    assert (await client.post("/api/auth/google", json={"credential": credential})).status_code == 401
+    await client.post("/api/auth/logout")
+    forged = jwt.encode({"sub": user["id"], "email": user["email"], "exp": int(time.time()) + 600},
+        NONCE_TEST_KEY, algorithm="HS256")
+    assert (await client.get("/api/auth/me", headers={"Authorization": f"Bearer {forged}"})).status_code == 401
+
+
+@pytest.mark.parametrize("invalid", ["signature", "audience", "expired", "nonce"])
+async def test_frontend_nonces_retain_signature_audience_expiry_and_browser_binding(system, google_signer, monkeypatch, invalid):
+    client, *_ = system
+    monkeypatch.setattr(settings, "GOOGLE_CHALLENGE_SECRET", NONCE_TEST_KEY)
+    overrides = {"aud": "another-app"} if invalid == "audience" else {"exp": 1} if invalid == "expired" else {}
+    key = "untrusted-test-key-of-over-32-characters" if invalid == "signature" else NONCE_TEST_KEY
+    nonce = external_challenge(client, key, **overrides)
+    token = google_signer("different-browser" if invalid == "nonce" else nonce)
+    assert (await client.post("/api/auth/google", json={"credential": token})).status_code == 401
+    assert await db.get_user_repo().count() == 0
+
+
+async def test_old_nonce_remains_valid_during_rollout(system, google_signer, monkeypatch):
+    client, *_ = system
+    nonce = await challenge(client)
+    monkeypatch.setattr(settings, "GOOGLE_CHALLENGE_SECRET", NONCE_TEST_KEY)
+    assert (await client.post("/api/auth/google", json={"credential": google_signer(nonce)})).status_code == 200
