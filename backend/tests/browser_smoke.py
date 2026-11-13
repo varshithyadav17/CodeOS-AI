@@ -463,7 +463,10 @@ async def main():
         slow_session.on("pageerror", lambda error: errors.append(str(error)))
         await slow_session.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
         me_started, finish_me = asyncio.Event(), asyncio.Event()
+        session_checks = 0
         async def old_session(route):
+            nonlocal session_checks
+            session_checks += 1
             me_started.set()
             await finish_me.wait()
             await route.fulfill(status=401, content_type="application/json", body='{"detail":"Missing bearer token"}')
@@ -479,6 +482,7 @@ async def main():
             finish_me.set()
             await slow_session.unroute_all(behavior="wait")
         await expect(slow_session.get_by_test_id("user-name")).to_have_text("Google Browser")
+        assert session_checks == 1
         await slow_session.close()
         checks.append("The main link renders sign-in before session lookup and a late anonymous result cannot undo a Google login")
 

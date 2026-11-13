@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { cancelGoogleSignInSetup } from "../lib/googleIdentity";
 
@@ -27,6 +27,10 @@ export function AuthProvider({ children }) {
     initialCheck.current = check;
     return check.promise;
   }, []);
+
+  // Restore the cookie session once above the per-user workspace, which
+  // remounts when someone signs in or out.
+  useEffect(() => { init(); }, [init]);
 
   const updateSession = useCallback(async (path, body) => {
     if (mutating.current) throw new Error("An authentication request is already in progress.");
@@ -66,7 +70,7 @@ export function AuthProvider({ children }) {
     window.google?.accounts?.id?.disableAutoSelect();
   }, [updateSession]);
 
-  const value = { user, loading, authPending, init, login, signup, googleExchange, logout, refreshUser };
+  const value = { user, loading, authPending, login, signup, googleExchange, logout, refreshUser };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import AppLayout from "./components/AppLayout";
@@ -27,10 +27,7 @@ function Protected({ children }) {
 }
 
 export default function App() {
-  const { init, user, authPending } = useAuth();
-  useEffect(() => {
-    init();
-  }, [init]);
+  const { user, authPending } = useAuth();
   const entry = user && !authPending ? <Navigate to="/dashboard" replace /> : <AuthPage />;
 
   return (
