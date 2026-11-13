@@ -22,6 +22,7 @@ Use the root `.env` with Docker Compose. Use `backend/.env` for native backend d
 | `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` | Graph connection; use a secure Neo4j URI for a hosted graph |
 | `QDRANT_URL`, `QDRANT_API_KEY` | Vector service connection |
 | `GOOGLE_CLIENT_ID` | Optional public Google sign-in client ID; delivered to the frontend at runtime; see `GOOGLE_SIGN_IN.md` |
+| `GOOGLE_CHALLENGE_SECRET` | Optional separate random nonce key, shared with the Vercel setup function in production |
 | `CORS_ORIGINS` | Exact trusted browser origins, including scheme and port |
 | `AUTH_COOKIE_SECURE` | `true` for HTTPS production |
 | `AUTH_COOKIE_SAMESITE` | Usually `lax`; `none` requires secure cookies and explicit cross-origin setup |
@@ -43,7 +44,7 @@ Verify with `python scripts/check_services.py --ai` inside `backend`, then `scri
 
 ## Google sign-in
 
-Follow [GOOGLE_SIGN_IN.md](GOOGLE_SIGN_IN.md). Run `alembic upgrade head` to include revision `b17006a91f42` before starting the updated backend. Only backend `GOOGLE_CLIENT_ID` is configured; no frontend build-time duplicate is needed. Live consent, authorized origins and popup/FedCM behavior must be checked on the actual domain.
+Follow [GOOGLE_SIGN_IN.md](GOOGLE_SIGN_IN.md). Run `alembic upgrade head` to include revision `b17006a91f42` before starting the updated backend. For the hosted Vercel frontend, configure the public client ID and dedicated challenge key in its server environment. Live consent, authorized origins and popup/FedCM behavior must be checked on the actual domain.
 
 ## Model/index changes
 

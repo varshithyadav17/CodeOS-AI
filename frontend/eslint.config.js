@@ -53,6 +53,10 @@ export default [
     },
   },
   {
+    files: ['api/**/*.js', 'src/lib/googleChallengeEndpoint.test.js'],
+    languageOptions: { globals: { Request: 'readonly', Response: 'readonly' } },
+  },
+  {
     files: ['src/main.jsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
