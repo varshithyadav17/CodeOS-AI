@@ -11,7 +11,7 @@ import Skeleton from '../../components/Skeleton';
 import './graph.css';
 const nodeTypes = { kg: KGNodeView };
 const KnowledgeGraph = memo(function KnowledgeGraph() {
-  const { repo, graph, graphLoading, graphError, loadGraphPage, repoLoading, repoLoadError,
+  const { repo, graph, graphLoading, graphError, loadGraphPage, setActiveTab,
     selectedNodeId, selectNode, selectFile, clearSelection, askInChat, highlightPaths } = useWorkspace();
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState('all');
@@ -63,9 +63,14 @@ const KnowledgeGraph = memo(function KnowledgeGraph() {
   const incoming = edges.filter(edge => edge.target_id === selectedNodeId);
   const outgoing = edges.filter(edge => edge.source_id === selectedNodeId);
   const neighbors = nodes.filter(node => node.id !== selectedNodeId && neighborhood.has(node.id));
-  if (repoLoading) return <Skeleton className="h-[600px]" />;
-  if (repoLoadError) return <ErrorState message={repoLoadError} testId="graph-error" />;
-  if (!nodes.length) return <EmptyState icon={NetworkIcon} title="No knowledge graph yet." subtitle="The graph will appear after source parsing finishes." testId="graph-empty" />;
+  if (graphLoading && !nodes.length) return <div role="status" aria-label="Loading knowledge graph"><Skeleton className="h-[600px]" /></div>;
+  if (graphError && !nodes.length) return <div className="space-y-3">
+    <ErrorState message={graphError} onRetry={() => loadGraphPage()} testId="graph-error" />
+    <button type="button" onClick={() => setActiveTab('files')} className="text-sm text-[#91cfcc] underline">Open source files</button>
+  </div>;
+  if (!nodes.length) return <EmptyState icon={NetworkIcon} title="No knowledge graph available"
+    subtitle="You can still open your source files. Re-ingest from the saved archive if the graph needs to be rebuilt."
+    action={{ label: "Open source files", onClick: () => setActiveTab('files') }} testId="graph-empty" />;
   return <section className="code-map" aria-label="Repository code map">
     <header className="code-map-heading">
       <div className="code-map-title"><NetworkIcon width={22} height={22} aria-hidden="true" /><div><h2>Code map</h2><p>Explore the structure. Follow the connections.</p></div></div>
@@ -113,7 +118,7 @@ const KnowledgeGraph = memo(function KnowledgeGraph() {
       {(search || kind !== 'all' || relation !== 'all' || focus) && <button onClick={reset}>Reset view</button>}
       <div><button data-testid="graph-previous" disabled={graphLoading || !graph.offset} onClick={() => { reset(); loadGraphPage(Math.max(0, graph.offset - graph.limit)); }}>Previous</button><button data-testid="graph-next" disabled={graphLoading || !graph.has_more} onClick={() => { reset(); loadGraphPage((graph.offset || 0) + graph.limit); }}>{graphLoading ? 'Loading…' : 'Next →'}</button></div>
     </footer>
-    {graphError && <p className="p-3 text-sm text-red-400" role="alert">{graphError}</p>}
+    {graphError && <ErrorState message={graphError} onRetry={() => loadGraphPage()} testId="graph-error" compact />}
     {graph.edges_truncated && <p className="p-3 text-xs text-white/50">This dense page shows its first 10,000 relationships.</p>}
   </section>;
 });

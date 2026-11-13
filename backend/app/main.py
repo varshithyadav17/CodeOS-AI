@@ -18,6 +18,8 @@ from .ai.routes import router as ai_router
 from .memory.routes import router as memory_router
 from .jobs import worker_loop
 from .middleware import UploadLimitMiddleware
+from .stores.graph import GraphStoreUnavailable
+from .stores.vectors import VectorStoreUnavailable
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -75,6 +77,9 @@ async def ready(user=Depends(get_current_user)):
             async with asyncio.timeout(15):
                 await operation()
             return name, "ok"
+        except VectorStoreUnavailable as exc:
+            logger.warning("readiness_dependency_unavailable provider=%s reason=%s", name, exc)
+            return name, "unavailable"
         except Exception:
             return name, "unavailable"
     status = dict(await asyncio.gather(check("postgresql", postgres),
@@ -108,6 +113,11 @@ async def request_safety(request: Request, call_next):
             return JSONResponse({"detail": "Invalid Content-Length."}, status_code=400)
     try:
         response = await call_next(request)
+    except (GraphStoreUnavailable, VectorStoreUnavailable) as exc:
+        kind = "graph" if isinstance(exc, GraphStoreUnavailable) else "search_index"
+        logger.warning("dependency_unavailable request_id=%s path=%s provider=%s reason=%s", request_id, request.url.path, kind, exc)
+        detail = "The knowledge graph is unavailable. Source files are still available." if kind == "graph" else "The AI search index is temporarily unavailable. Try again shortly."
+        response = JSONResponse({"detail": detail, "request_id": request_id}, status_code=503, headers={"Retry-After": "30"})
     except Exception:
         logger.exception("request_failed request_id=%s path=%s", request_id, request.url.path)
         response = JSONResponse({"detail": "Service operation failed. Check service health and retry.", "request_id": request_id}, status_code=503)

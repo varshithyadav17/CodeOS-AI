@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 import SelectionBar from "./SelectionBar";
 import WorkspaceHeader from "./WorkspaceHeader";
@@ -25,7 +25,7 @@ function PanelFallback() {
 const TAB_KEYS = ["chat", "review", "arch", "graph", "files", "docs", "timeline"];
 
 function Workspace() {
-  const { repo, graph, activeTab, setActiveTab, selectFile, selectNode, clearSelection, askInChat } = useWorkspace();
+  const { repo, graph, graphError, activeTab, setActiveTab, selectFile, selectNode, clearSelection, askInChat } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -40,15 +40,17 @@ function Workspace() {
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
   }, [location.state, location.pathname, location.search, repo.id, askInChat, navigate]);
 
+  const requestedTab = searchParams.get("tab");
+  const file = searchParams.get("file");
+  const symbol = searchParams.get("symbol");
   useEffect(() => {
-    const requestedTab = searchParams.get("tab");
     if (TAB_KEYS.includes(requestedTab)) setActiveTab(requestedTab);
-    const file = searchParams.get("file");
-    const symbol = searchParams.get("symbol");
-    if (!file && !symbol) {
-      if (requestedTab) setSearchParams({}, { replace: true });
-      return;
-    }
+  }, [requestedTab, setActiveTab]);
+
+  useEffect(() => {
+    if (!requestedTab && !file && !symbol) return;
+    // Resolve a linked symbol once the independent graph request completes.
+    if (symbol && graph.limit == null && !graphError) return;
     if (symbol) {
       const match = graph.nodes.find((n) => n.qualified_name === symbol);
       if (match) selectNode(match.id);
@@ -57,8 +59,7 @@ function Workspace() {
       selectFile(file);
     }
     setSearchParams({}, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [requestedTab, file, symbol, graph, graphError, selectFile, selectNode, setSearchParams]);
 
   // Keyboard shortcuts: 1-7 to jump tabs, Esc to clear selection.
   useEffect(() => {
@@ -103,7 +104,7 @@ function Workspace() {
       </TabsContent>
 
       <TabsContent value="graph" className="mt-4 space-y-3 animate-in fade-in duration-150">
-        <ErrorBoundary label="KnowledgeGraph"><Suspense fallback={<PanelFallback />}><KnowledgeGraph nodes={graph.nodes} edges={graph.edges} /></Suspense></ErrorBoundary>
+        <ErrorBoundary label="KnowledgeGraph"><Suspense fallback={<PanelFallback />}><KnowledgeGraph /></Suspense></ErrorBoundary>
       </TabsContent>
 
       <TabsContent value="files" className="mt-4 animate-in fade-in duration-150">
@@ -135,18 +136,16 @@ export default function RepoDetail() {
   useEffect(() => {
     loadRepo(id);
     return () => clearCurrentRepo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, loadRepo, clearCurrentRepo]);
 
   useEffect(() => {
-    if (!repo) return;
+    if (repo?.id !== id) return;
     if (["ready", "failed", "delete_failed"].includes(repo.status)) return;
-    const t = setInterval(() => pollRepoStatus(id), repo.status === "waiting_embeddings" ? 10000 : 2500);
+    const t = setInterval(() => pollRepoStatus(id), ["waiting_embeddings", "waiting_graph"].includes(repo.status) ? 10000 : 2500);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, repo?.status]);
+  }, [id, repo?.id, repo?.status, pollRepoStatus]);
 
-  if (repoLoading || (!repo && !repoLoadError)) {
+  if (repoLoading || (repo?.id !== id && !repoLoadError)) {
     return <LoadingOverlay />;
   }
 
@@ -154,6 +153,7 @@ export default function RepoDetail() {
     return (
       <div className="p-10" data-testid="repo-detail-error">
         <ErrorState message={repoLoadError} onRetry={() => loadRepo(id)} />
+        <Link to="/repositories" className="mt-4 inline-block text-sm text-[#91cfcc] hover:underline">Back to repositories</Link>
       </div>
     );
   }

@@ -16,7 +16,7 @@ function colorOf(path) { return EXT_COLORS[extOf(path)] || "rgba(255,255,255,0.4
 
 export default function FilesPanel() {
   const {
-    files, repoId, repo,
+    files, filesLoading, filesError, loadFiles, repoId, repo,
     selectedFilePath, selectFile, setActiveTab,
     highlightPaths, askInChat, fileNodeByPath,
   } = useWorkspace();
@@ -52,7 +52,9 @@ export default function FilesPanel() {
   }, [files, search]);
 
   if (!repoReady) return <div className="text-white/40 text-sm p-4">Waiting for ingestion to complete…</div>;
-  if (files.length === 0) return <SkeletonList rows={8} rowClassName="h-7" />;
+  if (filesLoading) return <SkeletonList rows={8} rowClassName="h-7" />;
+  if (filesError) return <ErrorState message={filesError} onRetry={loadFiles} testId="files-list-error" />;
+  if (!files.length) return <p className="p-4 text-sm text-white/50">No indexed files are available yet.</p>;
 
   return (
     <div className="grid grid-cols-12 gap-3" data-testid="files-panel">
@@ -111,7 +113,7 @@ export default function FilesPanel() {
             <span className="mono text-xs text-white/60 truncate max-w-[220px]" title={selectedFilePath}>{selectedFilePath}</span>
             <div className="ml-auto flex flex-wrap gap-1">
               {fileNodeByPath.has(selectedFilePath) && (
-                <button data-testid="files-jump-graph" onClick={() => setActiveTab("graph")} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><NetworkIcon width={10} height={10} /> Graph</button>
+                <button data-testid="files-jump-graph" onClick={() => selectFile(selectedFilePath, { tab: "graph" })} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><NetworkIcon width={10} height={10} /> Graph</button>
               )}
               <button data-testid="files-jump-arch" onClick={() => setActiveTab("arch")} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><GitForkIcon width={10} height={10} /> Architecture</button>
               <button data-testid="files-jump-ask" disabled={repo?.status !== "ready"} title={repo?.status === "ready" ? "Ask about this file" : "Available when AI indexing finishes"} onClick={() => askInChat(`Explain what ${selectedFilePath} does and how it fits into the rest of the codebase.`)} className="text-[10px] mono flex items-center gap-1 px-2 py-1 rounded-sm border border-white/10 hover:border-[#3FC8E8] hover:text-[#3FC8E8] text-white/60"><MessageSquareTextIcon width={10} height={10} /> Ask</button>

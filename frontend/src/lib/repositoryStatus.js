@@ -3,6 +3,7 @@ export const hasParsedWorkspace = (repo) => repo?.status === "ready"
 
 export const repositoryStatusLabel = (status) => ({
   waiting_embeddings: "AI indexing paused",
+  waiting_graph: "Waiting for graph",
   embedding: "AI indexing",
   cloning: "Loading source",
 }[status] || status);

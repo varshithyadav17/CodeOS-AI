@@ -21,7 +21,7 @@ export default function Dashboard() {
   const repoResult = useFetch('/repos');
   const memoryResult = useFetch('/memory?limit=200');
   const repos = [...(repoResult.data || [])].sort((a, b) => (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0));
-  const attention = repos.filter(repo => ['failed', 'delete_failed', 'waiting_embeddings'].includes(repo.status));
+  const attention = repos.filter(repo => ['failed', 'delete_failed', 'waiting_graph', 'waiting_embeddings'].includes(repo.status));
   const findings = sortMemories(memoryResult.data || []).filter(isActionableMemory).slice(0, 3);
   const repoNames = new Map(repos.map(repo => [repo.id, repo.name]));
   return <div className="workspace-page dashboard-page" data-testid="dashboard-root">

@@ -95,6 +95,43 @@ async def pause_import(client, vectors, monkeypatch):
     return repo['id'], original, accepted
 
 
+async def test_qdrant_outage_keeps_files_and_graph_and_resumes_without_rebuilding(logged_in, monkeypatch):
+    import httpx
+    from qdrant_client.http.exceptions import ResponseHandlingException
+
+    client, graph, vectors, storage = logged_in
+    repo_id = (await upload(client))["id"]
+    original = vectors.client.collection_exists
+
+    async def unreachable(*args, **kwargs):
+        raise ResponseHandlingException(httpx.ConnectError("Qdrant unavailable"))
+
+    monkeypatch.setattr(vectors.client, "collection_exists", unreachable)
+    assert await run_once()
+    endpoint = f"/api/repos/{repo_id}"
+    paused = (await client.get(endpoint)).json()
+    assert paused["status"] == "waiting_embeddings"
+    assert paused["stats"]["chunks"] == 0
+    assert "Your files and graph are saved" in paused["message"]
+    assert (await client.get(endpoint + "/files/content?path=auth.py")).status_code == 200
+    assert (await client.get(endpoint + "/graph")).json()["nodes"]
+    graph_ids = set(graph.nodes)
+    assert len(storage.objects) == 1
+    jobs = (await client.get(endpoint + "/jobs")).json()
+    assert jobs[0]["attempts"] == 0 and jobs[0]["status"] == "retry"
+    assert jobs[0]["next_run_at"] > time.time()
+
+    monkeypatch.setattr(vectors.client, "collection_exists", original)
+    fail_rebuild = AsyncMock(side_effect=AssertionError("Existing graph must be reused"))
+    monkeypatch.setattr(graph, "delete_repo", fail_rebuild)
+    await due_jobs()
+    assert await run_once()
+    ready = (await client.get(endpoint)).json()
+    assert ready["status"] == "ready" and ready["stats"]["chunks"] > 0
+    assert set(graph.nodes) == graph_ids
+    fail_rebuild.assert_not_awaited()
+
+
 async def test_quota_pause_keeps_graph_source_and_checkpoints_then_resumes(logged_in, monkeypatch):
     client, graph, vectors, storage = logged_in
     repo_id, original, accepted = await pause_import(client, vectors, monkeypatch)

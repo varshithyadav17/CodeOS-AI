@@ -1,25 +1,34 @@
 """Repository-scoped Neo4j graph adapter. All Cypher parameters are bound."""
 from __future__ import annotations
+import asyncio
 import json
 from neo4j import AsyncGraphDatabase
+from neo4j.exceptions import AuthError, DatabaseUnavailable, ServiceUnavailable, SessionExpired
 from ..config import settings
 from ..models import KGEdge, KGNode
+
+
+class GraphStoreUnavailable(ConnectionError):
+    pass
 
 
 class Neo4jGraphService:
     def __init__(self, driver=None):
         self.driver = driver or AsyncGraphDatabase.driver(
             settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
-            connection_timeout=10, max_connection_pool_size=20,
-            connection_acquisition_timeout=15, max_transaction_retry_time=15,
+            connection_timeout=5, max_connection_pool_size=20,
+            connection_acquisition_timeout=6, max_transaction_retry_time=2,
         )
 
     async def _query(self, query, **params):
-        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:
-            async def run(tx):
-                result = await tx.run(query, **params)
-                return await result.data()
-            return await session.execute_write(run)
+        try:
+            async with asyncio.timeout(10), self.driver.session(database=settings.NEO4J_DATABASE) as session:
+                async def run(tx):
+                    result = await tx.run(query, **params)
+                    return await result.data()
+                return await session.execute_write(run)
+        except (TimeoutError, ServiceUnavailable, DatabaseUnavailable, SessionExpired, AuthError) as exc:
+            raise GraphStoreUnavailable("The graph service is unavailable.") from exc
 
     async def initialize(self):
         await self._query("CREATE CONSTRAINT code_node_id IF NOT EXISTS FOR (n:CodeNode) REQUIRE n.id IS UNIQUE")

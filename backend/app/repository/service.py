@@ -198,23 +198,20 @@ class IngestionService:
                 repo.id, time.monotonic()-stage_started, len(parsed), len(chunks))
             stage_started = time.monotonic()
             await self.graph.initialize()
-            await self.vectors.initialize()
             await check_job(job)
             resume = checkpoint.get("fingerprint") == fingerprint and checkpoint.get("graph_ready")
             if resume:
                 resume = (await self.graph.count_nodes(repo.id), await self.graph.count_edges(repo.id)) == (len(nodes), len(edges))
-                resume = resume and await self.vectors.count(repo.id) >= checkpoint.get("offset", 0)
             if not resume:
                 await self._update(job, status="parsing", progress=50, message="Building repository relationships")
                 await save_details(job, index_checkpoint={})
                 await self.graph.delete_repo(repo.id)
-                await self.vectors.delete_namespace(repo.id)
                 await check_job(job)
                 await self.graph.upsert_nodes(nodes)
                 await self.graph.upsert_edges(edges)
                 if (await self.graph.count_nodes(repo.id), await self.graph.count_edges(repo.id)) != (len(nodes), len(edges)):
                     raise RuntimeError("Graph count verification failed.")
-                checkpoint = {"fingerprint": fingerprint, "graph_ready": True, "offset": 0}
+                checkpoint = {"fingerprint": fingerprint, "graph_ready": True, "offset": 0, "reset_vectors": True}
                 await save_details(job, index_checkpoint=checkpoint)
             languages = {}
             for file in parsed:
@@ -228,6 +225,17 @@ class IngestionService:
             logger.info("ingestion_stage repo_id=%s stage=graph seconds=%.3f resumed=%s", repo.id, time.monotonic()-stage_started, bool(resume))
             logger.info("ingestion_index repo_id=%s files=%d nodes=%d edges=%d chunks=%d completed=%d resumed=%s",
                 repo.id, len(parsed), len(nodes), len(edges), len(chunks), offset, bool(resume))
+            # Publish the graph and manifest before contacting the search index.
+            # A suspended Qdrant cluster must not prevent browsing parsed code.
+            await self.vectors.initialize()
+            await check_job(job)
+            if checkpoint.get("reset_vectors") or await self.vectors.count(repo.id) < offset:
+                await self.vectors.delete_namespace(repo.id)
+                offset = stats.chunks = 0
+                checkpoint = {**checkpoint, "offset": 0, "reset_vectors": False}
+                await save_details(job, index_checkpoint=checkpoint)
+                await self._update(job, progress=70, message=f"Files and graph ready. AI indexing: 0/{len(chunks)} chunks.",
+                    stats=stats.model_dump())
             # Checkpoint only completed writes. Each batch also reuses existing
             # Qdrant IDs if shutdown interrupted the checkpoint transaction.
             for batch in embedding_batches(chunks[offset:], text=lambda c: c.text):
