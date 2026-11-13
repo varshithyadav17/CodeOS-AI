@@ -99,6 +99,32 @@ async def main():
         repo_id = page.url.rsplit("/", 1)[-1]
         await expect(page.get_by_test_id("tab-files")).to_be_visible(timeout=15000)
         checks.append("ZIP upload, background ingestion, status polling")
+
+        graph_pending, return_graph = asyncio.Event(), asyncio.Event()
+        graph_pattern = f"**/api/repos/{repo_id}/graph?*"
+        async def unavailable_graph(route):
+            graph_pending.set()
+            await return_graph.wait()
+            await route.fulfill(status=503, content_type="application/json", body='{"detail":"Graph temporarily unavailable"}')
+        await page.route(graph_pattern, unavailable_graph)
+        await page.goto(f"http://127.0.0.1:5173/repositories/{repo_id}")
+        await asyncio.wait_for(graph_pending.wait(), timeout=10)
+        try:
+            # Source opens before the graph request reaches any conclusion.
+            await expect(page.get_by_test_id("repo-detail-root")).to_be_visible()
+            await page.get_by_test_id("tab-files").click()
+            await page.get_by_test_id("file-auth.py").click()
+            await expect(page.get_by_test_id("file-content-pre")).to_contain_text("def authenticate")
+        finally:
+            return_graph.set()
+        await page.get_by_test_id("tab-graph").click()
+        await expect(page.get_by_test_id("graph-error")).to_be_visible()
+        await expect(page.get_by_test_id("repo-detail-error")).not_to_be_visible()
+        await page.unroute(graph_pattern, unavailable_graph)
+        await page.get_by_test_id("graph-error").get_by_role("button", name="Retry").click()
+        await expect(page.get_by_test_id("knowledge-graph")).to_be_visible()
+        checks.append("Repository and source open during a slow, failed graph request, then the graph recovers independently")
+
         await page.get_by_test_id("tab-timeline").click()
         await expect(page.get_by_test_id("timeline-unavailable")).to_be_visible()
         checks.append("ZIP repository timeline explains that Git history is unavailable")

@@ -43,6 +43,12 @@ The free demo uses `gemini-3.5-flash-lite` for generation and keeps the existing
 
 Enter private values directly in Render's setup/environment form. Do not paste API keys or passwords into chat, commit them to GitHub, or use unrelated QuickChat credentials. The Google client ID is public; this sign-in flow does not require a Google client secret. Additional Google setup and live tests are in [GOOGLE_SIGN_IN.md](GOOGLE_SIGN_IN.md).
 
+### Recover a suspended provider
+
+If Neo4j or Qdrant becomes unreachable, check the existing instance in [Neo4j Aura](https://console.neo4j.io/) or [Qdrant Cloud](https://cloud.qdrant.io/). Resume or reactivate it if paused, and verify authenticated `/api/health/ready` after it is running. Resuming the same instance preserves its indexes. If an instance was replaced, update only the associated provider variables and re-ingest from the saved repository archive to rebuild missing indexes.
+
+The repository page loads independently of the graph and file list requests. Once Neo4j has stored the graph, the source and graph remain available during Qdrant outages. Imports delayed by either dependency keep the archive and retry with backoff. For imports already marked failed before this recovery behavior was deployed, use **Re-ingest** on the existing repository after the provider recovers.
+
 ## Apply and finish deployment
 
 The current Aura credentials have been restored and real graph requests pass. All four Neo4j fields now use `sync: false`, preserving the manually saved connection on future Blueprint updates. No further credential reset or instance recreation is needed.

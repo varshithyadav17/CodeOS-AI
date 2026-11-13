@@ -15,6 +15,8 @@ from sqlalchemy import and_, insert, or_, select, text, update
 from . import database as db
 from .config import settings
 from .embedding_limits import EmbeddingDeferred
+from .stores.graph import GraphStoreUnavailable
+from .stores.vectors import VectorStoreUnavailable
 
 logger = logging.getLogger(__name__)
 _sqlite_lock = asyncio.Lock()
@@ -155,21 +157,30 @@ async def _execute(job):
 
 
 async def _record_failure(job, exc):
-    if isinstance(exc, EmbeddingDeferred) and job["kind"] == "ingest" and job["details"].get("index_checkpoint", {}).get("graph_ready"):
+    graph_ready = job["details"].get("index_checkpoint", {}).get("graph_ready")
+    if job["kind"] == "ingest" and isinstance(exc, VectorStoreUnavailable) and graph_ready:
+        logger.warning("search_index_unavailable repo_id=%s reason=%s", job["repo_id"], exc)
+        exc = EmbeddingDeferred(60, "vector_store")
+    graph_wait = job["kind"] == "ingest" and isinstance(exc, GraphStoreUnavailable)
+    if graph_wait or (job["kind"] == "ingest" and graph_ready and isinstance(exc, EmbeddingDeferred)):
         deferrals = job["details"].get("quota_deferrals", 0) + 1
-        delay = exc.retry_after
-        if exc.reason == "quota":
-            delay = max(delay, min(900, 65 * 2**min(deferrals - 1, 4)))
-        await save_details(job, quota_deferrals=deferrals, pause_reason=exc.reason)
+        reason = "graph_store" if graph_wait else exc.reason
+        delay = 60 if graph_wait else exc.retry_after
+        if reason in {"quota", "graph_store", "vector_store"}:
+            base = 65 if reason == "quota" else 60
+            delay = max(delay, min(900, base * 2**min(deferrals - 1, 4)))
+        status = "waiting_graph" if graph_wait else "waiting_embeddings"
+        message = "Source saved. The knowledge graph is temporarily unavailable. Analysis will retry automatically." if graph_wait else str(exc)
+        await save_details(job, quota_deferrals=deferrals, pause_reason=reason)
         async with db.get_engine().begin() as conn:
             await conn.execute(update(db.jobs).where(db.jobs.c.id == job["id"], db.jobs.c.lease_token == job["lease_token"]).values(
-                status="retry", attempts=max(0, job["attempts"]-1), lease_until=0, error="EmbeddingDeferred:" + exc.reason,
+                status="retry", attempts=max(0, job["attempts"]-1), lease_until=0, error="DependencyDeferred:" + reason,
                 next_run_at=time.time()+delay, updated_at=db.now()))
             await conn.execute(update(db.repositories).where(db.repositories.c.id == job["repo_id"],
                 db.repositories.c.active_job_id == job["id"], ~db.repositories.c.status.in_(["deleting", "delete_failed"])).values(
-                status="waiting_embeddings", message=str(exc), updated_at=db.now()))
-        logger.log(logging.INFO if exc.reason == "pacing" else logging.WARNING,
-            "embedding_paused repo_id=%s reason=%s retry_after=%.0f", job["repo_id"], exc.reason, delay)
+                status=status, message=message, updated_at=db.now()))
+        logger.log(logging.INFO if reason == "pacing" else logging.WARNING,
+            "ingestion_paused repo_id=%s reason=%s retry_after=%.0f", job["repo_id"], reason, delay)
         return
     permanent = isinstance(exc, ValueError)
     retry = not permanent and job["attempts"] < settings.JOB_MAX_ATTEMPTS
@@ -252,7 +263,7 @@ async def run_once():
                     await done.execute(update(db.jobs).where(db.jobs.c.id == job["id"]).values(status="retry", lease_until=0, attempts=max(0, job["attempts"]-1), next_run_at=0, updated_at=db.now()))
                 raise
             except Exception as exc:
-                if not isinstance(exc, EmbeddingDeferred):
+                if not (job["kind"] == "ingest" and isinstance(exc, (EmbeddingDeferred, GraphStoreUnavailable, VectorStoreUnavailable))):
                     logger.exception("job_failed job_id=%s repo_id=%s kind=%s attempt=%s", job["id"], job["repo_id"], job["kind"], job["attempts"])
                 await _record_failure(job, exc)
             finally:

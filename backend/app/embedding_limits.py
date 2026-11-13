@@ -20,6 +20,7 @@ class EmbeddingDeferred(Exception):
             "quota": "Google's embedding quota is temporarily full. Your files and graph are saved; AI indexing will resume automatically.",
             "daily_quota": "Google's daily embedding quota is exhausted. Your files and graph are saved; AI indexing will resume after the quota reset.",
             "unavailable": "The embedding provider is temporarily unavailable. Your files and graph are saved; AI indexing will retry automatically.",
+            "vector_store": "AI search is temporarily unavailable. Your files and graph are saved. Indexing will retry automatically.",
             "continuation": "Your files and graph are ready. AI indexing is continuing from its saved progress.",
         }
         super().__init__(messages.get(reason, messages["unavailable"]))

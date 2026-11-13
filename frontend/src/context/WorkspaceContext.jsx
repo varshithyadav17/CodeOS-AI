@@ -22,7 +22,7 @@ export function WorkspaceProvider({ children }) {
   const [reposLoading, setReposLoading] = useState(true);
   const [reposError, setReposError] = useState(null);
   const repoInFlight = useRef(new Set()); // repo ids with an optimistic action pending
-  const graphLoadedFor = useRef(null);
+  const openedRepo = useRef(null);
 
   const loadRepositories = useCallback(async () => {
     const r = await api.get("/repos");
@@ -107,7 +107,7 @@ export function WorkspaceProvider({ children }) {
     repoInFlight.current.add(id);
     try {
       await api.post(`/repos/${id}/reingest`);
-      graphLoadedFor.current = null;
+      if (openedRepo.current?.id === id) openedRepo.current.partsStarted = false;
       setRepositories((rs) => rs.map((r) => r.id === id ? { ...r, status: "queued", progress: 0, message: "Analysis queued" } : r));
       setRepo((r) => r?.id === id ? { ...r, status: "queued", progress: 0, message: "Analysis queued" } : r);
       await loadRepositories();
@@ -116,12 +116,13 @@ export function WorkspaceProvider({ children }) {
 
   // ---- Current repo detail (Repository detail page) --------------------
   const [currentRepoId, setCurrentRepoId] = useState(null);
-  const repoIdRef = useRef(null);
   const [repo, setRepo] = useState(null);
   const [graph, setGraph] = useState({ nodes: [], edges: [] });
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState(null);
   const [files, setFiles] = useState([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesError, setFilesError] = useState(null);
   const [repoLoading, setRepoLoading] = useState(true);
   const [repoLoadError, setRepoLoadError] = useState(null);
 
@@ -140,94 +141,122 @@ export function WorkspaceProvider({ children }) {
     setPendingChatPrompt(null);
   }, []);
 
-  const refreshRepo = useCallback(async (id) => {
-    const r = await api.get(`/repos/${id}`);
-    if (repoIdRef.current !== id) return r.data;
-    setRepo(r.data);
-    if (hasParsedWorkspace(r.data)) {
-      const g = await api.get(`/repos/${id}/graph?limit=120`);
-      let allFiles = [], offset = 0;
-      while (true) {
-        const f = await api.get(`/repos/${id}/files`, { params: { limit: 1000, offset } });
-        if (repoIdRef.current !== id) return r.data;
-        allFiles = [...allFiles, ...f.data];
-        if (f.data.length < 1000) break;
-        offset += 1000;
-      }
-      if (repoIdRef.current === id) {
-        setGraph(g.data);
-        setFiles(allFiles);
-        graphLoadedFor.current = id;
-      }
-    }
-    return r.data;
-  }, []);
-
   const loadGraphPage = useCallback(async (offset) => {
-    const id = repoIdRef.current;
-    if (!id) return;
+    const session = openedRepo.current;
+    if (!session) return;
+    session.graphRequest?.abort();
+    const request = new AbortController();
+    session.graphRequest = request;
+    session.graphOffset = offset ?? session.graphOffset ?? 0;
     setGraphLoading(true);
     setGraphError(null);
     try {
-      const response = await api.get(`/repos/${id}/graph`, { params: { limit: 120, offset } });
-      if (repoIdRef.current === id) setGraph(response.data);
-    } catch (error) {
-      if (repoIdRef.current === id) setGraphError(error?.response?.data?.detail || "Failed to load graph. Try again.");
+      const { data } = await api.get(`/repos/${session.id}/graph`, {
+        params: { limit: 120, offset: session.graphOffset }, signal: request.signal, timeout: 20000,
+      });
+      if (!request.signal.aborted) setGraph(data);
+    } catch {
+      if (!request.signal.aborted) setGraphError("The knowledge graph couldn’t load. You can still browse your source files.");
     } finally {
-      if (repoIdRef.current === id) setGraphLoading(false);
+      if (!request.signal.aborted) setGraphLoading(false);
     }
   }, []);
 
+  const loadFiles = useCallback(async () => {
+    const session = openedRepo.current;
+    if (!session) return;
+    session.filesRequest?.abort();
+    const request = new AbortController();
+    session.filesRequest = request;
+    setFilesLoading(true);
+    setFilesError(null);
+    try {
+      const all = [];
+      const limit = 1000;
+      for (let offset = 0; ; offset += limit) {
+        const { data } = await api.get(`/repos/${session.id}/files`, {
+          params: { limit, offset }, signal: request.signal, timeout: 20000,
+        });
+        if (request.signal.aborted) return;
+        all.push(...data);
+        if (data.length < limit) break;
+      }
+      setFiles(all);
+    } catch {
+      if (!request.signal.aborted) setFilesError("Couldn’t load the file list. Try again.");
+    } finally {
+      if (!request.signal.aborted) setFilesLoading(false);
+    }
+  }, []);
+
+  const startPanels = useCallback((session, data) => {
+    if (!hasParsedWorkspace(data) || session.partsStarted) return;
+    session.partsStarted = true;
+    loadGraphPage(0);
+    loadFiles();
+  }, [loadGraphPage, loadFiles]);
+
+  const cancelRequests = useCallback(() => {
+    const session = openedRepo.current;
+    session?.request.abort();
+    session?.graphRequest?.abort();
+    session?.filesRequest?.abort();
+    openedRepo.current = null;
+  }, []);
+
   const loadRepo = useCallback(async (id) => {
-    graphLoadedFor.current = null;
-    repoIdRef.current = id;
+    cancelRequests();
+    const session = { id, request: new AbortController(), partsStarted: false, polling: false };
+    openedRepo.current = session;
     setRepo(null);
     setGraph({ nodes: [], edges: [] });
     setGraphLoading(false);
     setGraphError(null);
     setFiles([]);
+    setFilesLoading(false);
+    setFilesError(null);
     setCurrentRepoId(id);
     setRepoLoading(true);
     setRepoLoadError(null);
     resetSelection();
     try {
-      const loaded = await refreshRepo(id);
-      if (repoIdRef.current === id && loaded.status !== "ready") setActiveTab("graph");
+      const { data } = await api.get(`/repos/${id}`, { signal: session.request.signal });
+      if (openedRepo.current !== session) return;
+      setRepo(data);
+      if (data.status !== "ready") setActiveTab("graph");
+      // A repository opens as soon as its own record arrives. Panel requests
+      // are independent, so a graph outage cannot block files or history.
+      startPanels(session, data);
     } catch (e) {
-      if (repoIdRef.current === id) setRepoLoadError(e?.response?.data?.detail || "Failed to load repository");
+      if (openedRepo.current === session) setRepoLoadError(e?.response?.data?.detail || "Failed to load repository");
     } finally {
-      if (repoIdRef.current === id) setRepoLoading(false);
+      if (openedRepo.current === session) setRepoLoading(false);
     }
-  }, [refreshRepo, resetSelection]);
+  }, [cancelRequests, startPanels, resetSelection]);
 
   const clearCurrentRepo = useCallback(() => {
-    repoIdRef.current = null;
+    cancelRequests();
     setCurrentRepoId(null);
     setRepo(null);
     setGraph({ nodes: [], edges: [] });
     setFiles([]);
-  }, []);
+  }, [cancelRequests]);
 
-  // Lightweight poll used while ingestion is in progress — hits the
-  // purpose-built /status endpoint instead of re-fetching the full repo
-  // document every 2.5s. Once it flips to "ready" (or "failed"), we do one
-  // full refresh to pull in stats/graph/files. Callers own starting/
-  // stopping this via an effect keyed on repo status (see Repository page).
   const pollRepoStatus = useCallback(async (id) => {
+    const session = openedRepo.current;
+    if (session?.id !== id || session.polling) return;
+    session.polling = true;
     try {
-      const r = await api.get(`/repos/${id}/status`);
-      if (repoIdRef.current !== id) return;
-      setRepo((prev) => (prev?.id === id ? { ...prev, ...r.data } : prev));
-      if (["ready", "failed", "delete_failed"].includes(r.data.status)
-          || (hasParsedWorkspace(r.data) && graphLoadedFor.current !== id)) {
-        await refreshRepo(id);
-      }
+      const { data } = await api.get(`/repos/${id}/status`, { signal: session.request.signal, timeout: 15000 });
+      if (openedRepo.current !== session) return;
+      setRepo((prev) => prev?.id === id ? { ...prev, ...data } : prev);
+      startPanels(session, data);
     } catch (e) {
-      if (e.response?.status === 404 && repoIdRef.current === id) setRepoLoadError("Repository was deleted.");
-      // Transient network hiccups during polling shouldn't interrupt the
-      // view — the next tick retries automatically.
+      if (e.response?.status === 404 && openedRepo.current === session) setRepoLoadError("Repository was deleted.");
+    } finally {
+      session.polling = false;
     }
-  }, [refreshRepo]);
+  }, [startPanels]);
 
   // ---- lookup indexes built once per graph fetch --------------------------
   const nodeById = useMemo(() => {
@@ -314,6 +343,9 @@ export function WorkspaceProvider({ children }) {
       graphError,
       loadGraphPage,
       files,
+      filesLoading,
+      filesError,
+      loadFiles,
       repoLoading,
       repoLoadError,
       loadRepo,
@@ -354,6 +386,9 @@ export function WorkspaceProvider({ children }) {
       graphError,
       loadGraphPage,
       files,
+      filesLoading,
+      filesError,
+      loadFiles,
       repoLoading,
       repoLoadError,
       loadRepo,

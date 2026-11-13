@@ -247,6 +247,67 @@ async def test_git_import_uses_same_archive_pipeline_and_reingest_snapshot(logge
     assert (await client.get(f"/api/repos/{repo_id}/files/content", params={"path": "auth.py"})).status_code == 200
 
 
+async def test_github_import_keeps_archive_and_resumes_after_graph_outage(logged_in, monkeypatch):
+    import app.repository.service as service
+    from app.memory.service import TimelineService
+    from app.stores.graph import GraphStoreUnavailable
+
+    client, graph, _, storage = logged_in
+    clone_calls = 0
+
+    async def clone(url, dest, branch, job):
+        nonlocal clone_calls
+        clone_calls += 1
+        dest.mkdir()
+        (dest / "module.py").write_text("def useful():\n    return True\n")
+        return "a" * 40
+
+    async def unavailable():
+        raise GraphStoreUnavailable("Simulated graph outage")
+
+    monkeypatch.setattr(service, "clone_github", clone)
+    monkeypatch.setattr(TimelineService, "snapshot", lambda self: {"available": True, "commits": []})
+    original = graph.initialize
+    monkeypatch.setattr(graph, "initialize", unavailable)
+    response = await client.post("/api/repos/github", json={"url": "https://github.com/example/project"})
+    assert response.status_code == 202
+    repo_id = response.json()["id"]
+    assert await run_once()
+    saved = await db.get_repo_repo().get(repo_id)
+    assert saved.status == "waiting_graph" and saved.archive_sha256 and saved.source_commit == "a" * 40
+    assert len(storage.objects) == 1
+    history = (await client.get(f"/api/repos/{repo_id}/jobs")).json()
+    assert history[0]["status"] == "retry" and history[0]["attempts"] == 0
+
+    monkeypatch.setattr(graph, "initialize", original)
+    await due_jobs()
+    assert await run_once()
+    assert clone_calls == 1
+    assert (await db.get_repo_repo().get(repo_id)).status == "ready"
+    assert (await client.get(f"/api/repos/{repo_id}/graph")).json()["nodes"]
+    assert (await client.get(f"/api/repos/{repo_id}/files/content?path=module.py")).json()["content"].startswith("def useful")
+
+
+async def test_graph_outage_leaves_saved_source_accessible(logged_in, monkeypatch):
+    from app.stores.graph import GraphStoreUnavailable
+
+    client, graph, *_ = logged_in
+    repo_id = (await ready_repo(client))["id"]
+    endpoint = f"/api/repos/{repo_id}"
+
+    async def unavailable(*args, **kwargs):
+        raise GraphStoreUnavailable("Simulated graph outage")
+
+    monkeypatch.setattr(graph, "list_nodes", unavailable)
+    response = await client.get(endpoint + "/graph")
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "30"
+    assert "Source files" in response.json()["detail"]
+    assert (await client.get(endpoint)).json()["status"] == "ready"
+    assert (await client.get(endpoint + "/files")).status_code == 200
+    assert (await client.get(endpoint + "/files/content?path=auth.py")).json()["content"].startswith("def authenticate")
+
+
 async def test_final_ingestion_failure_cleans_partial_indexes(logged_in,monkeypatch):
     from app.config import settings
     client,graph,vectors,storage=logged_in

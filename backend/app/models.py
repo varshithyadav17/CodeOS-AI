@@ -37,6 +37,7 @@ class RepoStatus(str, Enum):
     QUEUED = "queued"
     CLONING = "cloning"
     PARSING = "parsing"
+    WAITING_GRAPH = "waiting_graph"
     EMBEDDING = "embedding"
     WAITING_EMBEDDINGS = "waiting_embeddings"
     READY = "ready"

@@ -11,6 +11,7 @@ const statusColor = {
   cloning: "text-[#FFB300]",
   parsing: "text-[#FFB300]",
   waiting_embeddings: "text-[#3FC8E8]",
+  waiting_graph: "text-[#3FC8E8]",
   embedding: "text-[#FFB300]",
   ready: "text-[#34C759]",
   failed: "text-[#FF3B30]",
