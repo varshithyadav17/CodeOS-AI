@@ -2,21 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { googleFailure, googleRetrySeconds, requestGoogleChallenge } from './googleRecovery.js';
 const limited = delay => ({ response: { status: 429, headers: delay === undefined ? {} : { 'retry-after': delay } }, message: 'Request failed with status code 429', isAxiosError: true });
-test('short throttling waits for Retry-After and recovers with one fresh challenge', async () => {
+test('two throttled setup requests recover without shortening Retry-After', async () => {
   let calls = 0; const waits = [];
-  const result = await requestGoogleChallenge(async () => { if (++calls === 1) throw limited('3'); return { nonce: 'fresh' }; }, async ms => waits.push(ms));
-  assert.deepEqual(result, { nonce: 'fresh' }); assert.equal(calls, 2); assert.deepEqual(waits, [3000]);
+  const result = await requestGoogleChallenge(async () => {
+    if (++calls === 1) throw limited('30');
+    if (calls === 2) throw limited('3');
+    return { nonce: 'fresh' };
+  }, { wait: async ms => waits.push(ms) });
+  assert.deepEqual(result, { nonce: 'fresh' }); assert.equal(calls, 3); assert.deepEqual(waits, [30000, 3000]);
 });
 test('long cooldown returns immediately instead of flooding or blocking setup', async () => {
   let calls = 0;
-  await assert.rejects(requestGoogleChallenge(async () => { calls++; throw limited('120'); }, () => assert.fail('Must not wait in setup')));
+  await assert.rejects(requestGoogleChallenge(async () => { calls++; throw limited('120'); }, { wait: () => assert.fail('Must not wait in setup') }));
   assert.equal(calls, 1); assert.equal(googleFailure(limited('120')).retryAfter, 120);
-  assert.match(googleFailure(limited('120')).message, /temporarily rate-limited/);
+  assert.match(googleFailure(limited('120')).message, /sign-in service is busy/);
 });
 test('repeated 429s are bounded and never expose Axios error copy', async () => {
   let calls = 0;
-  await assert.rejects(requestGoogleChallenge(async () => { calls++; throw limited(); }, async () => {}));
-  assert.equal(calls, 2); assert.equal(googleFailure(limited()).retryAfter, 30);
+  await assert.rejects(requestGoogleChallenge(async () => { calls++; throw limited(); }, { wait: async () => {} }));
+  assert.equal(calls, 3); assert.equal(googleFailure(limited()).retryAfter, 30);
   assert.doesNotMatch(googleFailure(limited()).message, /status code/);
 });
 test('Retry-After supports dates, zero, malformed and missing values', () => {
@@ -27,11 +31,20 @@ test('Retry-After supports dates, zero, malformed and missing values', () => {
 });
 test('credential and configuration errors are not automatically retried', async () => {
   let calls = 0; const invalid = { response: { status: 401, data: { detail: 'Invalid Google credential' } } };
-  await assert.rejects(requestGoogleChallenge(async () => { calls++; throw invalid; }, () => assert.fail('Do not retry')));
+  await assert.rejects(requestGoogleChallenge(async () => { calls++; throw invalid; }, { wait: () => assert.fail('Do not retry') }));
   assert.equal(calls, 1); assert.equal(googleFailure(invalid).message, 'Invalid Google credential');
 });
 test('upstream downtime retries once and timeout errors provide readable recovery', async () => {
   let calls = 0;
-  const result = await requestGoogleChallenge(async () => { if (++calls === 1) throw { response: { status: 503 } }; return 'ready'; }, async ms => assert.equal(ms, 2000));
+  const result = await requestGoogleChallenge(async () => { if (++calls === 1) throw { response: { status: 503 } }; return 'ready'; }, { wait: async ms => assert.equal(ms, 2000) });
   assert.equal(result, 'ready'); assert.equal(googleFailure({code:'ECONNABORTED'}).retryAfter, 5);
+});
+test('an authentication change cancels a pending setup retry', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  await assert.rejects(requestGoogleChallenge(async () => { calls++; throw limited('30'); }, {
+    signal: controller.signal,
+    onRetry: () => controller.abort(),
+  }), { code: 'ERR_CANCELED' });
+  assert.equal(calls, 1);
 });

@@ -28,14 +28,33 @@ function loadLibrary() {
   return libraryPromise;
 }
 
-// Share in-flight preparation across StrictMode mounts. Later login visits get
-// a fresh nonce and install the callback for the current component.
-export function prepareGoogleSignIn() {
+// Share setup across StrictMode mounts, but get a fresh nonce on later visits.
+export function prepareGoogleSignIn(onRetry) {
   if (!preparation) {
-    preparation = requestGoogleChallenge(() => api.get("/auth/google/challenge", { timeout: 60000 })).then(async ({ data }) => {
+    const controller = new AbortController();
+    const flight = { controller, onRetry, retrying: false, promise: null };
+    // Start loading the Google SDK while fetching CodeOS setup. Always handle
+    // script errors, including when the challenge itself fails first.
+    const identity = loadLibrary().then(value => ({ value }), error => ({ error }));
+    flight.promise = requestGoogleChallenge(options => api.get("/auth/google/challenge", options), {
+      signal: controller.signal,
+      onRetry: () => { flight.retrying = true; flight.onRetry?.(); },
+    }).then(async ({ data }) => {
       if (!data.enabled) return data;
-      return { ...data, identity: await loadLibrary() };
-    }).finally(() => { preparation = null; });
+      const library = await identity;
+      if (library.error) throw library.error;
+      if (!data.client_id || !data.nonce) throw new Error("Google sign-in setup could not be loaded.");
+      return { ...data, identity: library.value };
+    }).finally(() => { if (preparation === flight) preparation = null; });
+    preparation = flight;
+  } else {
+    preparation.onRetry = onRetry;
+    if (preparation.retrying) onRetry?.();
   }
-  return preparation;
+  return preparation.promise;
+}
+
+export function cancelGoogleSignInSetup() {
+  preparation?.controller.abort();
+  preparation = null;
 }

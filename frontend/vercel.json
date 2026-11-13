@@ -5,6 +5,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/auth/google/challenge",
+      "destination": "/api/google-challenge"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://codeos-api.onrender.com/api/:path*"
     },

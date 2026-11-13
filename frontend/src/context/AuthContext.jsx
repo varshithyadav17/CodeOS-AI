@@ -1,65 +1,72 @@
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { cancelGoogleSignInSetup } from "../lib/googleIdentity";
 
 const AuthContext = createContext(null);
 
-/**
- * Auth state lives in memory only. Persistence is done by the backend's
- * HttpOnly cookie (`codeos_token`), which is XSS-resistant. `init()` asks
- * the backend "who am I?" — if the cookie is valid we get the user,
- * otherwise we show the login screen.
- *
- * This replaces the previous Zustand `useAuth` store 1:1 — same fields,
- * same async behavior (callers still catch/throw the same way) — just
- * exposed via React context instead of an external store.
- */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authPending, setAuthPending] = useState(false);
+  const revision = useRef(0);
+  const initialCheck = useRef(null);
+  const mutating = useRef(false);
 
-  const init = useCallback(async () => {
+  const init = useCallback(() => {
+    if (initialCheck.current) return initialCheck.current.promise;
+    const startedAt = revision.current;
+    const controller = new AbortController();
+    const check = { controller, promise: null };
+    check.promise = api.get("/auth/me", { signal: controller.signal }).then(
+      ({ data }) => { if (startedAt === revision.current) setUser(data.user); },
+      () => { if (startedAt === revision.current) setUser(null); },
+    ).finally(() => {
+      if (initialCheck.current === check) initialCheck.current = null;
+      if (startedAt === revision.current) setLoading(false);
+    });
+    initialCheck.current = check;
+    return check.promise;
+  }, []);
+
+  const updateSession = useCallback(async (path, body) => {
+    if (mutating.current) throw new Error("An authentication request is already in progress.");
+    mutating.current = true;
+    setAuthPending(true);
     try {
-      const r = await api.get("/auth/me");
-      setUser(r.data.user);
-    } catch {
-      setUser(null);
-    } finally {
+      const { data } = await api.post(path, body);
+      // An earlier anonymous session check must not replace a new login.
+      revision.current += 1;
+      initialCheck.current?.controller.abort();
+      cancelGoogleSignInSetup();
+      const next = data.user ?? null;
+      setUser(next);
       setLoading(false);
+      return next;
+    } finally {
+      mutating.current = false;
+      setAuthPending(false);
     }
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const r = await api.post("/auth/login", { email, password });
-    setUser(r.data.user);
-    return r.data.user;
-  }, []);
-
-  const signup = useCallback(async (email, password, name) => {
-    const r = await api.post("/auth/signup", { email, password, name });
-    setUser(r.data.user);
-    return r.data.user;
-  }, []);
-
-  const googleExchange = useCallback(async (credential, linkPassword) => {
-    const r = await api.post("/auth/google", { credential, link_password: linkPassword || undefined });
-    setUser(r.data.user);
-    return r.data.user;
-  }, []);
+  const login = useCallback((email, password) => updateSession("/auth/login", { email, password }), [updateSession]);
+  const signup = useCallback((email, password, name) => updateSession("/auth/signup", { email, password, name }), [updateSession]);
+  const googleExchange = useCallback((credential, linkPassword) =>
+    updateSession("/auth/google", { credential, link_password: linkPassword || undefined }), [updateSession]);
 
   const refreshUser = useCallback(async () => {
+    const startedAt = revision.current;
     const r = await api.get("/auth/me");
-    setUser(r.data.user);
+    if (startedAt === revision.current) setUser(r.data.user);
     return r.data.user;
   }, []);
 
   const logout = useCallback(async () => {
     // Keep the session visible until the server clears the HttpOnly cookie.
-    await api.post("/auth/logout");
+    await updateSession("/auth/logout");
     window.google?.accounts?.id?.disableAutoSelect();
-    setUser(null);
-  }, []);
+  }, [updateSession]);
 
-  const value = { user, loading, init, login, signup, googleExchange, logout, refreshUser };
+  const value = { user, loading, authPending, init, login, signup, googleExchange, logout, refreshUser };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

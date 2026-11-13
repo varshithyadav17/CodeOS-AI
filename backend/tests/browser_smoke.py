@@ -426,37 +426,80 @@ async def main():
         recovering.on("pageerror", lambda error: errors.append(str(error)))
         await recovering.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
         calls = 0
-        async def once_limited(route):
+        async def twice_limited(route):
             nonlocal calls
             calls += 1
-            if calls == 1:
+            if calls <= 2:
                 await route.fulfill(status=429, headers={"Retry-After": "1"}, content_type="application/json", body='{"detail":"Too many requests"}')
             else:
                 await route.continue_()
-        await recovering.route("**/api/auth/google/challenge", once_limited)
+        await recovering.route("**/api/auth/google/challenge", twice_limited)
         await recovering.goto("http://127.0.0.1:5173/login")
+        await expect(recovering.get_by_test_id("google-unavailable-button")).to_be_visible()
+        await expect(recovering.get_by_role("status")).to_contain_text("Reconnecting to sign-in")
         await expect(recovering.get_by_test_id("google-test-button")).to_be_visible(timeout=15000)
-        assert calls == 2
+        assert calls == 3
         await expect(recovering.get_by_role("alert")).not_to_be_visible()
         await recovering.close()
-        checks.append("Google setup recovers automatically after a short HTTP 429 without a reload")
+        checks.append("Google setup recovers automatically after two HTTP 429s without a reload")
         throttled = await browser.new_page()
         throttled.on("pageerror", lambda error: errors.append(str(error)))
         await throttled.clock.install()
         await throttled.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
-        await throttled.route("**/api/auth/google/challenge", lambda route: route.fulfill(status=429, headers={"Retry-After": "30"}, content_type="application/json", body='{"detail":"Too many requests"}'))
+        await throttled.route("**/api/auth/google/challenge", lambda route: route.fulfill(status=429, headers={"Retry-After": "120"}, content_type="application/json", body='{"detail":"Too many requests"}'))
         await throttled.goto("http://127.0.0.1:5173/login")
-        await expect(throttled.get_by_role("alert")).to_contain_text("temporarily rate-limited")
+        await expect(throttled.get_by_role("alert")).to_contain_text("sign-in service is busy")
         await expect(throttled.get_by_test_id("google-refresh")).to_be_disabled()
         await expect(throttled.get_by_test_id("auth-submit-button")).to_be_enabled()
-        await throttled.clock.fast_forward(31000)
+        await throttled.clock.fast_forward(121000)
         await expect(throttled.get_by_test_id("google-refresh")).to_be_enabled()
         await throttled.unroute("**/api/auth/google/challenge")
         await throttled.get_by_test_id("google-refresh").click()
         await expect(throttled.get_by_test_id("google-test-button")).to_be_visible(timeout=15000)
         await throttled.close()
         checks.append("Google rate-limit countdown respects Retry-After, prevents repeated refreshes and preserves email sign-in")
+
+        slow_session = await browser.new_page()
+        slow_session.on("pageerror", lambda error: errors.append(str(error)))
+        await slow_session.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
+        me_started, finish_me = asyncio.Event(), asyncio.Event()
+        async def old_session(route):
+            me_started.set()
+            await finish_me.wait()
+            await route.fulfill(status=401, content_type="application/json", body='{"detail":"Missing bearer token"}')
+        await slow_session.route("**/api/auth/me", old_session)
+        await slow_session.goto("http://127.0.0.1:5173/")
+        await asyncio.wait_for(me_started.wait(), timeout=10)
+        await expect(slow_session.get_by_test_id("auth-form")).to_be_visible()
+        await expect(slow_session.get_by_test_id("google-test-button")).to_be_visible()
+        try:
+            await slow_session.get_by_test_id("google-test-button").click()
+            await expect(slow_session.get_by_test_id("dashboard-root")).to_be_visible()
+        finally:
+            finish_me.set()
+            await slow_session.unroute_all(behavior="wait")
+        await expect(slow_session.get_by_test_id("user-name")).to_have_text("Google Browser")
+        await slow_session.close()
+        checks.append("The main link renders sign-in before session lookup and a late anonymous result cannot undo a Google login")
+
+        blocked_exchange = await browser.new_page()
+        await blocked_exchange.route("https://accounts.google.com/gsi/client", lambda route: route.fulfill(content_type="application/javascript", body=GIS_TEST_SCRIPT))
+        posts = 0
+        async def limited_exchange(route):
+            nonlocal posts
+            posts += 1
+            await route.fulfill(status=429, headers={"Retry-After": "1"}, content_type="application/json", body='{"detail":"Too many requests"}')
+        await blocked_exchange.route("**/api/auth/google", limited_exchange)
+        await blocked_exchange.goto("http://127.0.0.1:5173/login")
+        await blocked_exchange.get_by_test_id("google-test-button").click()
+        await expect(blocked_exchange.get_by_role("alert")).to_contain_text("sign-in service is busy")
+        await expect(blocked_exchange.get_by_test_id("google-refresh")).to_be_enabled()
+        assert posts == 1
+        await blocked_exchange.close()
+        checks.append("A rate-limited credential exchange is never automatically resubmitted")
+
         unconfigured = await browser.new_page()
+        await unconfigured.route("https://accounts.google.com/gsi/client", lambda route: route.abort())
         await unconfigured.route("**/api/auth/google/challenge", lambda route: route.fulfill(content_type="application/json", body='{"enabled":false}'))
         await unconfigured.goto("http://127.0.0.1:5173/login")
         await expect(unconfigured.get_by_test_id("google-unavailable-button")).to_be_visible()

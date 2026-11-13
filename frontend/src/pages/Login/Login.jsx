@@ -11,7 +11,7 @@ import logoLight from "../../assets/logo/logo-light.svg";
 
 export default function AuthPage() {
   const nav = useNavigate();
-  const { login, signup } = useAuth();
+  const { login, signup, authPending } = useAuth();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,6 +20,7 @@ export default function AuthPage() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (busy || authPending) return;
     setBusy(true);
     try {
       if (mode === "login") {
@@ -91,7 +92,7 @@ export default function AuthPage() {
             </p>
           </div>
 
-          <GoogleSignIn busy={busy} onSignedIn={() => {
+          <GoogleSignIn busy={busy || authPending} onSignedIn={() => {
             toast.success("Signed in with Google"); nav("/dashboard");
           }} />
 
@@ -117,7 +118,7 @@ export default function AuthPage() {
             <Button
               data-testid="auth-submit-button"
               type="submit"
-              disabled={busy}
+              disabled={busy || authPending}
               className="w-full bg-gradient-to-b from-[#52D4F0] to-[#3FC8E8] hover:brightness-105 text-black font-medium rounded-lg py-2 mt-2 disabled:opacity-60 shadow-[0_6px_20px_-4px_rgba(63,200,232,0.5)] hover:shadow-[0_8px_26px_-4px_rgba(63,200,232,0.65)] transition-all duration-200"
             >
               {busy ? <Loader2Icon width={14} height={14} className="animate-spin" /> : mode === "login" ? "Sign in" : "Create account"}
@@ -127,6 +128,7 @@ export default function AuthPage() {
           <button
             data-testid="auth-mode-toggle"
             onClick={() => setMode(mode === "login" ? "signup" : "login")}
+            disabled={busy || authPending}
             className="w-full text-center text-xs text-white/50 hover:text-white mt-6 transition-colors"
           >
             {mode === "login" ? "Need an account? Sign up →" : "Already have an account? Sign in →"}
